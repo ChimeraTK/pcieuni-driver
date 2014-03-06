@@ -1,0 +1,34 @@
+                             The DAMC Linux device driver
+                             
+The DAMC device driver designed to provide access to the memmory and IO space of the DAMC module.
+As well to make DMA transfer from DAMC module to host memmory space.
+
+Installation:
+The driver file should to be installed in the /lib/modules/`uname -r'/ directory.
+Call "depmod -a" and try the driver calling "modprobe damc"
+The driver during loading creates the "damc" class in /sys/class and device nodes damcsX in /dev 
+directory. There X is a slot number in which the module is installed. To have standart device names 
+(for example damc0 or damc1) one should create udev rules.
+
+Creating udev rules (Ubuntu for other Linux versions read the udev manual):
+1. add this line to the /etc/udev/permissions.rules:
+# DAMC modules
+SUBSYSTEM=="damc",      MODE="066" 
+
+2.add lines to the /etc/udev/rules.d/60-symlinks.rules
+    #rules to create damc device nodes
+    KERNEL=="damcs3",     SYMLINK="damc1"
+    KERNEL=="damcs1",     SYMLINK="damc2"
+    KERNEL=="damcs2",     SYMLINK="damc0"
+    
+Using the driver:
+The example code is damc_pagetest.cpp or damc_dmatest.cpp.
+
+To read and write to and from memmory or IO spave of the module use read and write system calls with
+device_rw structe as an argument. This structe defined in the damc_fn.h:
+struct device_rw  {
+       u_int		offset_rw;  /*offset in address*/
+       u_int		data_rw;     /*data to set or returned read data */
+       u_int		mode_rw;   /*mode of rw (RW_D8, RW_D16, RW_D32)*/
+       u_int 	barx_rw;     /*BARx (0, 1, 2, 3)*/
+};

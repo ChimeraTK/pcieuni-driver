@@ -1,0 +1,12 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	:
+
+override_dh_auto_install:
+	dh_install pciedev_drv.c  pciedev_fnc.h  pciedev_ioctl_dma.c pciedev_test.cpp  Makefile /usr/src/pciedev-1/
+	dh_install 10-pciedev.rules /etc/udev/rules.d/
+	dh_dkms

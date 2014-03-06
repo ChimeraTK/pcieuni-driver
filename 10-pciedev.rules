@@ -1,0 +1,3 @@
+SUBSYSTEM=="pciedev",	MODE="0666"
+KERNEL=="pciedevs3",	SYMLINK="pciedev0"
+
