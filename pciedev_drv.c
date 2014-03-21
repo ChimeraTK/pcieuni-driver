@@ -6,6 +6,7 @@
 #include <linux/timer.h>
 
 #include "pciedev_fnc.h"
+#include "pciedev_buffer.h"
 
 MODULE_AUTHOR("Ludwig Petrosyan");
 MODULE_DESCRIPTION("DESY AMC-PCIE board driver");
@@ -33,8 +34,9 @@ struct file_operations pciedev_fops = {
 };
 
 static struct pci_device_id pciedev_ids[]  = {
-    { PCIEDEV_VENDOR_ID, PCIEDEV_DEVICE_ID,
-                   PCIEDEV_SUBVENDOR_ID, PCIEDEV_SUBDEVICE_ID, 0, 0, 0},
+    { PCIEDEV_VENDOR_ID, PCIEDEV_DEVICE_ID, PCIEDEV_SUBVENDOR_ID, PCIEDEV_SUBDEVICE_ID, 0, 0, 0},
+    // TODO: this was added so that driver would bind to the test-firmware. Should probably remove it or ask for complete list of supported device IDs
+    { PCIEDEV_VENDOR_ID, 0x0037,            PCIEDEV_SUBVENDOR_ID, PCIEDEV_SUBDEVICE_ID, 0, 0, 0},     
     { 0, }
 };
 MODULE_DEVICE_TABLE(pci, pciedev_ids);
@@ -50,12 +52,21 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
 {
     uint32_t intreg = 0;
     
-    struct pciedev_dev *pdev   = (pciedev_dev*)dev_id;
+    struct pciedev_dev *pdev = (pciedev_dev*)dev_id;
     struct module_dev *dev     = (module_dev *)(pdev->dev_str);
     
-    //printk(KERN_ALERT "PCIEDEV_INTERRUPT:   DMA IRQ\n");
+    PDEBUG("pciedev_interrupt: DMA_IRQ\n");
+    
+    spin_lock(&dev->dma_bufferList_lock);
+    pciedev_block* block;
+    block = list_entry(dev->dma_bufferList.next, struct pciedev_block, list);
+    block->dma_done = 1;
+    list_rotate_left(&dev->dma_bufferList);
+    spin_unlock(&dev->dma_bufferList_lock);
+    
     dev->waitFlag = 1;
     wake_up_interruptible(&(dev->waitDMA));
+    
     return IRQ_HANDLED;
 }
 
@@ -73,16 +84,10 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
     printk(KERN_ALERT "PCIEDEV_PROBE_EXP CALLED  FOR BOARD %i\n", tmp_brd_num);
     /*if board has created we will create our structure and pass it to pcedev_dev*/
     if(!result){
-        printk(KERN_ALERT "PCIEDEV_PROBE_EXP CREATING CURRENT STRUCTURE FOR BOARD %i\n", tmp_brd_num);
-        module_dev_pp = kzalloc(sizeof(module_dev), GFP_KERNEL);
-        if(!module_dev_pp){
-                return -ENOMEM;
-        }
+        printk(KERN_ALERT "PCIEDEV_PROBE_EXP CREATING CURRENT STRUCTURE FOR BOARD %i\n", brd_num);
+        module_dev_pp = pciedev_create_drvdata(tmp_brd_num, pciedev_cdev_m->pciedev_dev_m[tmp_brd_num]);
         printk(KERN_ALERT "PCIEDEV_PROBE CALLED; CURRENT STRUCTURE CREATED \n");
-        module_dev_p[tmp_brd_num] = module_dev_pp;
-        module_dev_pp->brd_num      = tmp_brd_num;
-        module_dev_pp->parent_dev  = pciedev_cdev_m->pciedev_dev_m[tmp_brd_num];
-        init_waitqueue_head(&module_dev_pp->waitDMA);
+        
         pciedev_set_drvdata(pciedev_cdev_m->pciedev_dev_m[tmp_brd_num], module_dev_p[tmp_brd_num]);
         pciedev_setup_interrupt(pciedev_interrupt, pciedev_cdev_m->pciedev_dev_m[tmp_brd_num], DEVNAME); 
     }
@@ -102,7 +107,8 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
      tmp_brd_num =pciedev_get_brdnum(dev);
      printk(KERN_ALERT "REMOVE CALLED FOR BOARD %i\n", tmp_brd_num);
      /* clean up any allocated resources and stuff here */
-     kfree(module_dev_p[tmp_brd_num]);
+     pciedev_release_drvdata(module_dev_p[tmp_brd_num]);
+     
      /*now we can call pciedev_remove_exp to clean all standard allocated resources
       will clean all interrupts if it seted 
       */

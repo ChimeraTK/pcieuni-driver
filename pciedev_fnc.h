@@ -14,21 +14,6 @@
 #define DMA_CPU_ADDRESS          0x8
 #define DMA_SIZE_ADDRESS          0xC
 
-struct module_dev {
-    int                          brd_num;
-//    spinlock_t            irq_lock;
-    struct timeval     dma_start_time;
-    struct timeval     dma_stop_time;
-    int                         waitFlag;
-    u32                       dev_dma_size;
-    u32                       dma_page_num;
-    int                         dma_offset;
-    int                         dma_order;
-    wait_queue_head_t  waitDMA;
-    struct pciedev_dev *parent_dev;
-};
-typedef struct module_dev module_dev;
-
 long     pciedev_ioctl_dma(struct file *, unsigned int* , unsigned long*, pciedev_cdev * );
 
 #endif /* _PCIEDEV_FNC_H_ */
