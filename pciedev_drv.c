@@ -4,33 +4,51 @@
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/timer.h>
+#include <linux/mm.h>
 
 #include "pciedev_fnc.h"
 #include "pciedev_buffer.h"
+#include "pciedev_dma.h"
 
 MODULE_AUTHOR("Ludwig Petrosyan");
 MODULE_DESCRIPTION("DESY AMC-PCIE board driver");
 MODULE_VERSION("2.0.0");
 MODULE_LICENSE("Dual BSD/GPL");
 
+static unsigned long  kbuf_blk_sz_kb = 4096;
+static unsigned short kbuf_blk_num   = 2;
+
+module_param(kbuf_blk_sz_kb, ulong, S_IRUGO);
+module_param(kbuf_blk_num, ushort, S_IRUGO);
+
+
 pciedev_cdev     *pciedev_cdev_m = 0;
 //pciedev_dev       *pciedev_dev_m   = 0;
 module_dev       *module_dev_p[PCIEDEV_NR_DEVS];
 module_dev       *module_dev_pp;
 
-static int        pciedev_open( struct inode *inode, struct file *filp );
-static int        pciedev_release(struct inode *inode, struct file *filp);
+static int     pciedev_open( struct inode *inode, struct file *filp );
+static int     pciedev_release(struct inode *inode, struct file *filp);
 static ssize_t pciedev_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos);
 static ssize_t pciedev_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos);
-static long     pciedev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+static long    pciedev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+static int     pciedev_mmap(struct file *filp, struct vm_area_struct *vma);
 
 struct file_operations pciedev_fops = {
-    .owner                  =  THIS_MODULE,
-    .read                     =  pciedev_read,
-    .write                    =  pciedev_write,
-    .unlocked_ioctl    =  pciedev_ioctl,
-    .open                    =  pciedev_open,
-    .release                =  pciedev_release,
+    .owner              =  THIS_MODULE,
+    .read               =  pciedev_read,
+    .write              =  pciedev_write,
+    .unlocked_ioctl     =  pciedev_ioctl,
+    .open               =  pciedev_open,
+    .release            =  pciedev_release,
+    .mmap               =  pciedev_mmap              
+};
+
+/**
+ * mmap operations struct.
+ */
+static struct vm_operations_struct pciedev_vmops = {
+    // TODO: nothing is needed here?
 };
 
 static struct pci_device_id pciedev_ids[]  = {
@@ -53,19 +71,22 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
     uint32_t intreg = 0;
     
     struct pciedev_dev *pdev = (pciedev_dev*)dev_id;
-    struct module_dev *dev     = (module_dev *)(pdev->dev_str);
+    struct module_dev *dev   = (module_dev *)(pdev->dev_str);
     
-    PDEBUG("pciedev_interrupt: DMA_IRQ\n");
+    PDEBUG("pciedev_interrupt(DMA_IRQ)\n");
     
-    spin_lock(&dev->dma_bufferList_lock);
-    pciedev_block* block;
-    block = list_entry(dev->dma_bufferList.next, struct pciedev_block, list);
-    block->dma_done = 1;
-    list_rotate_left(&dev->dma_bufferList);
-    spin_unlock(&dev->dma_bufferList_lock);
+    if (dev->dma_buffer)
+    {
+        PDEBUG("pciedev_interrupt(dma_offset=0x%lx, dma_size=0x%lx, drv_offset=0x%lx).\n", dev->dma_buffer->dma_offset, dev->dma_buffer->offset); 
+        
+        dev->dma_buffer->dma_done = 1;
+        dev->buffer_nrRead += 1;
+    }
+    wake_up_interruptible(&(dev->buffer_waitQueue));
     
     dev->waitFlag = 1;
     wake_up_interruptible(&(dev->waitDMA));
+    PDEBUG("pciedev_interrupt(DMA_IRQ): exit\n");
     
     return IRQ_HANDLED;
 }
@@ -84,8 +105,8 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
     printk(KERN_ALERT "PCIEDEV_PROBE_EXP CALLED  FOR BOARD %i\n", tmp_brd_num);
     /*if board has created we will create our structure and pass it to pcedev_dev*/
     if(!result){
-        printk(KERN_ALERT "PCIEDEV_PROBE_EXP CREATING CURRENT STRUCTURE FOR BOARD %i\n", brd_num);
-        module_dev_pp = pciedev_create_drvdata(tmp_brd_num, pciedev_cdev_m->pciedev_dev_m[tmp_brd_num]);
+        printk(KERN_ALERT "PCIEDEV_PROBE_EXP CREATING CURRENT STRUCTURE FOR BOARD %i\n", tmp_brd_num);
+        module_dev_p[tmp_brd_num] = pciedev_create_drvdata(tmp_brd_num, kbuf_blk_num, kbuf_blk_sz_kb * 1024, pciedev_cdev_m->pciedev_dev_m[tmp_brd_num]);
         printk(KERN_ALERT "PCIEDEV_PROBE CALLED; CURRENT STRUCTURE CREATED \n");
         
         pciedev_set_drvdata(pciedev_cdev_m->pciedev_dev_m[tmp_brd_num], module_dev_p[tmp_brd_num]);
@@ -177,6 +198,68 @@ static long  pciedev_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
     }
     return result;
 }
+
+int pciedev_mmap(struct file *filp, struct vm_area_struct *vma) 
+{
+    pciedev_dev   *dev  = filp->private_data;
+    module_dev    *mdev = (module_dev*)(dev->dev_str);
+    unsigned long mmap_pfn;
+    unsigned long size;
+    unsigned long offset;
+    pciedev_block *block;
+    int           status;
+    
+    if (vma->vm_end < vma->vm_start) {
+        return -EINVAL;
+    }
+    
+    if ((vma->vm_flags & VM_EXEC) || !(vma->vm_flags & VM_READ)) {
+        return -EACCES;
+    }
+    
+    size   = vma->vm_end - vma->vm_start;
+    offset = vma->vm_pgoff * PAGE_SIZE;
+    
+    /* Map kernel buffer block */
+    PDEBUG("SPIN-LOCK\n");
+    spin_lock(&mdev->dma_bufferList_lock);
+    
+    /* Find target block */
+    block = 0;
+    struct list_head *ptr; 
+    list_for_each(ptr, &mdev->dma_bufferList) 
+    {
+        block = list_entry(ptr, struct pciedev_block, list);
+        if ((block->offset == offset) && (block->size == size))
+        {
+            break;
+        }
+        block = 0;
+    }
+    spin_unlock(&mdev->dma_bufferList_lock);
+
+    if(!block) 
+    {
+        return -ENOMEM;
+    }
+    
+    PDEBUG("pciedev_mmap(offset=0x%lx, size=0x%lx): Found!\n", offset, size); 
+    
+    /* Map kernel memory into address space of a userspace process. */
+    mmap_pfn = virt_to_phys((void *)block->kaddr) >> PAGE_SHIFT;
+    status = remap_pfn_range(vma, vma->vm_start, mmap_pfn, size, vma->vm_page_prot);
+    if (status) {
+        printk(KERN_ERR "PCIEDEV: mmap can't remap memory to userspace\n");
+    }
+    
+    /* VM_IO | VM_DONTEXPAND | VM_DONTDUMP are set by remap_pfn_range() so
+     * vma->vm_flags |= VM_RESERVED is not needed anymore. */
+    vma->vm_ops = &pciedev_vmops;
+    vma->vm_private_data = block;
+    
+    return status;
+}
+
 
 static void __exit pciedev_cleanup_module(void)
 {

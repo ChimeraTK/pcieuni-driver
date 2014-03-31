@@ -4,6 +4,7 @@
 #include <string>
 #include <unistd.h>
 #include <pthread.h>
+#include <vector>
 #include "pciedev_io.h"
 
 using namespace std;
@@ -12,11 +13,15 @@ class IDevice
 {
 public:
     virtual bool StatusOk() const = 0;
-    virtual string Error() const = 0;
-    virtual int DmaRead(device_ioctrl_dma& dma_rw, char* buffer) const = 0;
-    virtual int KbufDmaRead(device_ioctrl_dma& dma_rw, char* buffer) const = 0;
-    virtual int StartKRingDmaRead(int offset, int bytes, int bytesPerCall) = 0;
-    virtual int WaitKRingDmaRead(char* buffer, int offset, int bytes, int bytesPerCall) const = 0;
+    virtual const string Error() const = 0;
+    virtual device_ioctrl_kbuf_info KbufInfo() = 0;
+    virtual int ReadDma(device_ioctrl_dma& dma_rw, char* buffer) const = 0;
+    virtual int KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) const = 0;
+    virtual int RequestReadDma(int offset, int bytes, int bytesPerCall) = 0;
+    virtual int WaitReadDma(char* buffer, int offset, int bytes, int bytesPerCall)= 0;
+    virtual void InitMMap(unsigned long bufsize) = 0;
+    virtual void ReleaseMMap() = 0; 
+    virtual int CollectMMapRead(char* buffer, int offset, int bytes, int bytesPerCall) = 0;
     
     virtual ~IDevice() {};
 };
@@ -25,30 +30,48 @@ class TDeviceMock : public IDevice
 {
 public:
     virtual bool StatusOk() const { return true; }
-    virtual string Error() const { return ""; }
-    virtual int DmaRead(device_ioctrl_dma& dma_rw, char* buffer) const 
+    virtual const string Error() const { return ""; }
+    
+    virtual device_ioctrl_kbuf_info KbufInfo()
+    {
+        device_ioctrl_kbuf_info info;
+        info.block_size = 4*1024*1024;
+        info.num_blocks = 2;
+        return info;
+    }
+    
+    virtual int ReadDma(device_ioctrl_dma& dma_rw, char* buffer) const 
     { 
         usleep(10);
         return 0; 
     }
 
-    virtual int KbufDmaRead(device_ioctrl_dma& dma_rw, char* buffer) const 
+    virtual int KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) const 
     { 
         usleep(10);
         return 0; 
     }
     
-    virtual int StartKRingDmaRead(int offset, int bytes, int bytesPerCall)
+    virtual int RequestReadDma(int offset, int bytes, int bytesPerCall)
     {
         return 0;
     }
     
-    virtual int WaitKRingDmaRead(char* buffer, int offset, int bytes, int bytesPerCall) const
+    virtual int WaitReadDma(char* buffer, int offset, int bytes, int bytesPerCall)
     {
         usleep(1000);
         return bytes; 
     }
     
+    virtual void InitMMap(unsigned long bufsize) {}
+    
+    virtual void ReleaseMMap() {}
+    
+    virtual int CollectMMapRead(char* buffer, int offset, int bytes, int bytesPerCall) 
+    {
+        usleep(1000);
+        return bytes; 
+    }
 };
 
 
@@ -56,14 +79,14 @@ class TDevice : public IDevice
 {
     struct TReadReq
     {
-        TReadReq(int handle, int offset, int bytes, int bytesPerCall) 
-        :   Handle(handle),
+        TReadReq(TDevice* device, int offset, int bytes, int bytesPerCall) 
+        :   Device(device),
             Offset(offset),
             Bytes(bytes),
             BytesPerCall(bytesPerCall)
         {}
         
-        const int Handle;
+        TDevice* const Device;
         const int Offset;
         const int Bytes;
         const int BytesPerCall;
@@ -74,19 +97,31 @@ public:
     
     int Handle() const;
     virtual bool   StatusOk() const;
-    virtual string Error() const;
-    virtual int DmaRead(device_ioctrl_dma& dma_rw, char* buffer) const;
-    virtual int KbufDmaRead(device_ioctrl_dma& dma_rw, char* buffer) const ;
-    virtual int StartKRingDmaRead(int offset, int bytes, int bytesPerCall);
-    virtual int WaitKRingDmaRead(char* buffer, int offset, int bytes, int bytesPerCall) const;
+    virtual const string Error() const;
+    virtual device_ioctrl_kbuf_info KbufInfo();
+    virtual int ReadDma(device_ioctrl_dma& dma_rw, char* buffer) const;
+    virtual int KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) const;
+    virtual int RequestReadDma(int offset, int bytes, int bytesPerCall);
+    virtual int Ioctl(long unsigned int req, device_ioctrl_dma* dma_rw, char* tgtBuffer = NULL);
+    virtual int WaitReadDma(char* buffer, int offset, int bytes, int bytesPerCall);
+    virtual void InitMMap(unsigned long bufsize);
+    virtual void ReleaseMMap(); 
+    virtual int CollectMMapRead(char* buffer, int offset, int bytes, int bytesPerCall);
     
 private:
-    static    void* DoStartKRingDmaRead(void* readReq);
+    static void* DoRequestReadDma(void* readReq);
+    char*  GetMMapBuffer(unsigned long offset);
+    
     
     string    fFile;      /**< Name of the device file node in /dev.  */
     int       fHandle;    /**< Device file descriptor.                */
     void*     fDevice;    /**< Device private context.                */
     pthread_t fReadReqThread;
+    string    fError;
+    device_ioctrl_kbuf_info fKbufInfo;
+
+    unsigned long fMmapBufSize;    
+    vector<char*> fMmapBufs;
 };
 
 #endif

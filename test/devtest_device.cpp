@@ -1,8 +1,24 @@
 #include <fcntl.h>
 #include "devtest_device.h"
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <cstring>
+#include <sstream>
+#include <iostream>
+#include <iomanip>
+#include <vector>
 
+void hex_dump(void* tgtBuffer, int size)
+{
+    cout << hex;
+    for (int i = 0; i < size; i++)
+    {
+        if (i%8 == 0) cout << endl;
+        int b = ((char*)tgtBuffer)[i];
+        cout << " " << setw(2) << setfill('0') << b;
+    }
+    cout << dec << endl;
+}
 
 TDevice::TDevice(string deviceFile)
     : fFile(deviceFile)
@@ -20,32 +36,60 @@ bool TDevice::StatusOk() const
     return fHandle >= 0;
 }
 
-string TDevice::Error() const
+const string TDevice::Error() const
 {
-    return "Invalid device";
+    return fError;
 }
 
-int TDevice::DmaRead(device_ioctrl_dma& dma_rw, char* buffer) const
+device_ioctrl_kbuf_info TDevice::KbufInfo()
+{
+    device_ioctrl_kbuf_info info;
+    int code = ioctl(this->fHandle, PCIEDEV_KBUF_INFO, &info);
+    if (code != 0) 
+    {
+        info.block_size = 0;
+        info.num_blocks = 0;
+        ostringstream stringStream;
+        stringStream << "KbufInfo() ERROR! errno = " << errno << " (" << strerror(errno) << ")"; 
+        this->fError = stringStream.str();
+    }
+
+    return info;
+}
+
+int TDevice::ReadDma(device_ioctrl_dma& dma_rw, char* buffer) const
 {
     memcpy(buffer, &dma_rw, sizeof(dma_rw));
     return ioctl(fHandle, PCIEDEV_READ_DMA, buffer);
 }
 
-int TDevice::KbufDmaRead(device_ioctrl_dma& dma_rw, char* buffer) const
+int TDevice::KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) const
 {
     memcpy(buffer, &dma_rw, sizeof(dma_rw));
-    return ioctl(fHandle, PCIEDEV_READ_KBUF_DMA, buffer);
+    return ioctl(fHandle, PCIEDEV_KBUF_READ_DMA, buffer);
 }
 
-int TDevice::StartKRingDmaRead(int offset, int bytes, int bytesPerCall)
+int TDevice::RequestReadDma(int offset, int bytes, int bytesPerCall)
 {
-    TReadReq* req = new TReadReq(this->Handle(), offset, bytes, bytesPerCall);
-    pthread_create(&fReadReqThread, NULL, &DoStartKRingDmaRead, req);
+    TReadReq* req = new TReadReq(this, offset, bytes, bytesPerCall);
     
-    return 0;
+    int code = 1;
+    
+    for (int retry = 5; (retry > 0) && (code != 0) ; retry--)
+    {
+        code = pthread_create(&fReadReqThread, NULL, &DoRequestReadDma, req);
+    }
+    
+    if (code)
+    {
+        ostringstream stringStream;
+        stringStream << " pthread(): ";
+        stringStream << " ERROR! errno = " << code << " (" << strerror(code) << ")"; 
+        fError = stringStream.str();
+    }
 }
 
-void* TDevice::DoStartKRingDmaRead(void* readReq)
+void* TDevice::DoRequestReadDma(void* readReq)
 {
     TReadReq* req = static_cast<TReadReq*>(readReq);
     
@@ -61,10 +105,8 @@ void* TDevice::DoStartKRingDmaRead(void* readReq)
         dma_rw.dma_size    = bytesToRead;
         dma_rw.dma_offset  = req->Offset + bytesRead;
 
-        int code = ioctl(req->Handle, PCIEDEV_READ_KRING_DMA, &dma_rw);
-        if (code != 0) 
+        if (0 != req->Device->Ioctl(PCIEDEV_REQUEST_READ_DMA, &dma_rw))
         {
-            // TODO: hande error
             break;
         }
         
@@ -73,9 +115,36 @@ void* TDevice::DoStartKRingDmaRead(void* readReq)
     }
     
     delete req;
+    
+    return NULL;
 }
 
-int TDevice::WaitKRingDmaRead( char* buffer, int offset, int bytes, int bytesPerCall) const
+int TDevice::Ioctl(long unsigned int req, device_ioctrl_dma* dma_rw, char* tgtBuffer)
+{
+    int code = 0;
+    
+    if (tgtBuffer == NULL)
+    {
+        code = ioctl(fHandle, req, dma_rw);
+    }
+    else
+    {
+        memcpy(tgtBuffer, dma_rw, sizeof(device_ioctrl_dma));
+        code = ioctl(fHandle, req, tgtBuffer);
+    }
+    
+    if (code != 0) 
+    {
+        ostringstream stringStream;
+        stringStream << "Ioctl(req= " << _IOC_NR(req) << " ,dma_offset=" << dma_rw->dma_offset << ", dma_size=" << dma_rw->dma_size << ")";
+        stringStream << " ERROR! errno = " << errno << " (" << strerror(errno) << ")"; 
+        fError = stringStream.str();
+    }
+    
+    return code;
+}
+
+int TDevice::WaitReadDma(char* buffer, int offset, int bytes, int bytesPerCall)
 {
     int bytesRead = 0;
     for (; bytes > 0 ; )
@@ -88,17 +157,87 @@ int TDevice::WaitKRingDmaRead( char* buffer, int offset, int bytes, int bytesPer
         dma_rw.dma_size    = bytesToRead;
         dma_rw.dma_offset  = offset + bytesRead;
         
-        char* offBuffer = &buffer[bytesRead];
-        memcpy(offBuffer, &dma_rw, sizeof(dma_rw));
-        int code = ioctl(fHandle, PCIEDEV_GET_KRING_DMA, offBuffer);
-        if (code != 0) 
+        if (0 != this->Ioctl(PCIEDEV_WAIT_READ_DMA, &dma_rw, &buffer[bytesRead]))
         {
-            // TODO: hande error
             break;
         }
         
         bytesRead += bytesToRead;
         bytes     -= bytesToRead;
+    }
+    
+    return bytesRead;
+}
+
+void TDevice::InitMMap(unsigned long bufsize)
+{
+    fMmapBufSize = bufsize;
+    long offset  = 0;
+    
+    while (offset >= 0)
+    {
+        char* kbuf = (char*)mmap(NULL, fMmapBufSize, PROT_READ, MAP_SHARED, fHandle, offset);
+        if (kbuf == MAP_FAILED)
+        {
+            offset = -1;
+        }
+        else
+        {
+            fMmapBufs.push_back(kbuf);
+            offset += fMmapBufSize;
+        }
+    }
+}
+
+char* TDevice::GetMMapBuffer(unsigned long offset)
+{
+    int i = offset/fMmapBufSize;
+    return i < fMmapBufs.size() ? fMmapBufs[i] : NULL;
+}
+
+void TDevice::ReleaseMMap()
+{
+    for (int i = 0; i < fMmapBufs.size(); i++)
+    {
+        munmap(fMmapBufs[i], fMmapBufSize);
+    }
+    
+    fMmapBufs.clear();    
+}
+
+int TDevice::CollectMMapRead(char* buffer, int offset, int bytes, int bytesPerCall)
+{
+    int bytesRead = 0;
+    for (; bytes > 0 ; )
+    {
+        int bytesToRead = min<int>(bytes, bytesPerCall);
+        
+        static device_ioctrl_dma dma_rw;
+        dma_rw.dma_cmd     = 0;
+        dma_rw.dma_pattern = 0; 
+        dma_rw.dma_size    = bytesToRead;
+        dma_rw.dma_offset  = offset + bytesRead;
+        
+        if (0 != this->Ioctl(PCIEDEV_WAIT_MMAP_KBUF, &dma_rw))
+        {
+            break;
+        }
+        
+        char* kbuf = this->GetMMapBuffer(dma_rw.dbuf_offset);
+        
+        if (kbuf) 
+        {
+            // This memcpy copies from kernel buffer to user space buffer. It is not necessary - here it simulates some data-processing 
+            //memcpy(&buffer[bytesRead], kbuf, bytesPerCall);
+            
+            if (0 != this->Ioctl(PCIEDEV_RELEASE_MMAP_KBUF, &dma_rw))
+            {
+                break;
+            }
+            
+            bytesRead += bytesToRead;
+            bytes     -= bytesToRead;
+        }
     }
     
     return bytesRead;
