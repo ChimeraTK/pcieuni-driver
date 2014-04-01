@@ -57,6 +57,52 @@ device_ioctrl_kbuf_info TDevice::KbufInfo()
     return info;
 }
 
+int TDevice::RegWrite(int bar, long offset, unsigned char* data, long dataSize)
+{
+    struct device_rw rw;
+    rw.offset_rw = offset;
+    rw.data_rw   = 0;
+    rw.data_rw   = *(reinterpret_cast<u_int*>(data));
+    rw.mode_rw   = RW_D32;
+    rw.barx_rw   = bar;
+    rw.size_rw   = 0;
+    rw.rsrvd_rw  = 0;
+    
+    int ret = write (fHandle, &rw, sizeof(device_rw));
+    if (ret != sizeof(device_rw))
+    {
+        ostringstream stringStream;
+        stringStream << "write() ERROR! errno = " << errno << " (" << strerror(errno) << ")"; 
+        this->fError = stringStream.str();
+        return -1;
+    }    
+    return 0;
+}
+
+int TDevice::RegRead(int bar, long offset, unsigned char* data, long dataSize)
+{
+    struct device_rw rw;
+    rw.offset_rw = offset;
+    rw.data_rw   = 0;
+    rw.mode_rw   = RW_D32;
+    rw.barx_rw   = bar;
+    rw.size_rw   = 1;
+    rw.rsrvd_rw  = 0;
+
+    hex_dump(&rw, sizeof(device_rw));
+    
+    int ret = read(fHandle, &rw, sizeof(device_rw));
+    if (ret != sizeof(device_rw))
+    {
+        ostringstream stringStream;
+        stringStream << "read() ERROR! errno = " << errno << " (" << strerror(errno) << ")"; 
+        this->fError = stringStream.str();
+        return -1;
+    }
+    memcpy(data, &(rw.data_rw), 4);
+    return 0;
+}
+
 int TDevice::ReadDma(device_ioctrl_dma& dma_rw, char* buffer) const
 {
     memcpy(buffer, &dma_rw, sizeof(dma_rw));

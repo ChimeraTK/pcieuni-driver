@@ -137,7 +137,8 @@ void pciedev_start_dma_read(module_dev* mdev, dma_desc* dma, pciedev_block* bloc
 {
     u32 tmp_data_32;
 
-    PDEBUG("pciedev_start_dma_read(dma_offset=0x%lx, dma_size=0x%lx)\n", block->dma_offset, block->dma_size); 
+    PDEBUG("pciedev_start_dma_read(dma_offset=0x%lx, dma_size=0x%lx, drv_offset=0x%lx)\n", block->dma_offset, block->dma_size, block->offset); 
+    //print_hex_dump_bytes("Buffer contents before DMA: ", DUMP_PREFIX_NONE, block->kaddr, 64);
     
     dma_sync_single_for_device(&mdev->parent_dev->pciedev_pci_dev->dev, block->dma_handle, (size_t)block->size, DMA_FROM_DEVICE);
     
@@ -352,6 +353,7 @@ int pciedev_wait_kring_dma(pciedev_dev *dev, device_ioctrl_dma* dma_arg, pciedev
     PDEBUG("pciedev_wait_kring_dma(dma_offset=0x%lx, dma_size=0x%lx): Target block found (drv_offset=0x%lx, size=0x%lx)\n", 
            dma_arg->dma_offset, dma_arg->dma_size, (*pblock)->offset, (*pblock)->size); 
     
+    //print_hex_dump_bytes("Buffer contents after DMA: ", DUMP_PREFIX_NONE, (*pblock)->kaddr, 64);
     
     if (pciedev_wait_dma_read(mdev, *pblock))
     {
@@ -503,6 +505,9 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
             pWriteBuf = (void *)__get_free_pages(GFP_KERNEL | __GFP_DMA, tmp_order);
             
             PDEBUG("pciedev_ioctl_dma(): Allocated buffer: 0x%lx of order %d", pWriteBuf, tmp_order);
+            
+            // TODO: Remove this
+            memset(pWriteBuf, 0xE9, tmp_dma_trns_size);
             
             pTmpDmaHandle      = pci_map_single(pdev, pWriteBuf, tmp_dma_trns_size, PCI_DMA_FROMDEVICE);
 
