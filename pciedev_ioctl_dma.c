@@ -102,12 +102,12 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
                 mutex_unlock(&dev->dev_mut);
                 return retval;
             }
-             if(!dev->memmory_base2){
+             if(!dev->memmory_base[2]){
                 printk("SIS8300_IOCTL_DMA: NO MEMORY\n");
                 retval = -ENOMEM;
                 return retval;
             }
-            dma_reg_address = dev->memmory_base2;
+            dma_reg_address = dev->memmory_base[2];
 
             tmp_dma_control_reg = (dma_data.dma_reserved1 >> 16) & 0xFFFF;
             tmp_dma_len_reg     = dma_data.dma_reserved1 & 0xFFFF;
