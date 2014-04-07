@@ -23,7 +23,7 @@ void pciedev_unpack_dma_desc(void* reg_address, device_ioctrl_dma* data, dma_des
     dma->cmd         = data->dma_cmd;
     dma->size        = data->dma_size;
     dma->offset      = data->dma_offset;
-    dma->trans_size  = DIV_ROUND_UP(data->dma_size, PCIEDEV_DMA_SYZE);
+    dma->trans_size  = PCIEDEV_DMA_SYZE * DIV_ROUND_UP(data->dma_size, PCIEDEV_DMA_SYZE);
 }
 
 pciedev_block* pciedev_bufring_get_writable(module_dev* dev, dma_desc* dma)
@@ -80,7 +80,7 @@ pciedev_block* pciedev_bufring_get_writable(module_dev* dev, dma_desc* dma)
         dma_buffer->dma_free   = 0;
         dma_buffer->dma_done   = 0;
         dma_buffer->dma_offset = dma->offset;
-        dma_buffer->dma_size   = dma->trans_size;
+        dma_buffer->dma_size   = min(dma->trans_size, dma_buffer->size);
         
         dev->buffer_waitFlag = 0;
     }
@@ -133,6 +133,7 @@ int pciedev_dma_release(module_dev* mdev)
     return 0;
 }
 
+
 void pciedev_start_dma_read(module_dev* mdev, dma_desc* dma, pciedev_block* block)
 {
     u32 tmp_data_32;
@@ -146,7 +147,7 @@ void pciedev_start_dma_read(module_dev* mdev, dma_desc* dma, pciedev_block* bloc
     iowrite32((u32)(block->dma_handle & 0xFFFFFFFF), (void*)(dma->reg_address + DMA_CPU_ADDRESS  ));
 
     smp_wmb();
-    udelay(5);
+    //udelay(5);
     tmp_data_32       = ioread32(dma->reg_address + 0x0); // be safe all writes are done
     smp_rmb();
 
@@ -163,9 +164,47 @@ void pciedev_start_dma_read(module_dev* mdev, dma_desc* dma, pciedev_block* bloc
     PDEBUG("SPIN-UNLOCKED\n");
     
     //start DMA
+    // TODO: switch back
     iowrite32(block->dma_size,                       (void*)(dma->reg_address + DMA_SIZE_ADDRESS ));
+    //iowrite32(0,                       (void*)(dma->reg_address + DMA_SIZE_ADDRESS ));
 }
 
+
+void pciedev_dma_req_handler(struct work_struct *work)
+{
+    module_dev* mdev = container_of(work, struct module_dev, dma_work);
+    
+    dma_desc dma;
+    pciedev_unpack_dma_desc(mdev->parent_dev->memmory_base2, &mdev->dma_workData, &dma);
+    if(dma.size <= 0) 
+    {
+        // TODO: handle error
+        return;
+    }
+    
+    for (; dma.size > 0; )
+    {
+        pciedev_block* block;
+        
+        block = pciedev_bufring_get_writable(mdev, &dma);
+        if(!block) 
+        {
+            // TODO: handle error
+            return;
+        }
+        dma.offset += block->dma_size;
+        dma.size   -= block->dma_size;
+        
+        if (pciedev_dma_reserve(mdev)) 
+        {
+            // TODO: handle error
+            return;
+        }
+        
+        pciedev_start_dma_read(mdev, &dma, block);
+        pciedev_dma_release(mdev);
+    }
+}
 pciedev_block* pciedev_bufring_find_buffer(module_dev* dev, dma_desc* dma)
 {
     pciedev_block* block;
@@ -507,7 +546,7 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
             PDEBUG("pciedev_ioctl_dma(): Allocated buffer: 0x%lx of order %d", pWriteBuf, tmp_order);
             
             // TODO: Remove this
-            memset(pWriteBuf, 0xE9, tmp_dma_trns_size);
+            // memset(pWriteBuf, 0xE9, tmp_dma_trns_size);
             
             pTmpDmaHandle      = pci_map_single(pdev, pWriteBuf, tmp_dma_trns_size, PCI_DMA_FROMDEVICE);
 
@@ -518,13 +557,16 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
             tmp_data_32         = dma_sys_addr;
             iowrite32(tmp_data_32, ((void*)(dma_reg_address + DMA_CPU_ADDRESS)));
             smp_wmb();
-            udelay(5);
+            //udelay(5);
             tmp_data_32       = ioread32(dma_reg_address + 0x0); // be safe all writes are done
             smp_rmb();
             tmp_data_32         = tmp_dma_trns_size;
             do_gettimeofday(&(module_dev_pp->dma_start_time));
             module_dev_pp->waitFlag = 0;
+            
+            // TODO: switch back
             iowrite32(tmp_data_32, ((void*)(dma_reg_address + DMA_SIZE_ADDRESS)));
+            //iowrite32(0, ((void*)(dma_reg_address + DMA_SIZE_ADDRESS)));
             timeDMAwait = wait_event_interruptible_timeout( module_dev_pp->waitDMA, module_dev_pp->waitFlag != 0, value );
             do_gettimeofday(&(module_dev_pp->dma_stop_time));
              if(!module_dev_pp->waitFlag){
@@ -591,6 +633,45 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
             }
             break;
 
+        case PCIEDEV_KRING_READ_DMA:
+        {
+            if (copy_from_user(&module_dev_pp->dma_workData, (void*)arg, io_dma_size)) {
+                mutex_unlock(&dev->dev_mut);
+                return -EFAULT;
+            }
+            
+            if (!schedule_work(&module_dev_pp->dma_workData))
+            {
+                mutex_unlock(&dev->dev_mut);
+                return -EFAULT;
+            }
+         
+            int read = 0; 
+            for (; read < module_dev_pp->dma_workData.dma_size; )
+            {
+                pciedev_block* block;
+                
+                retval = pciedev_wait_kring_dma(dev, read + module_dev_pp->dma_workData.dma_offset, &block);
+                if (block)
+                {
+                    if (copy_to_user((void *)arg + read, block->kaddr, block->dma_size))
+                    {
+                        retval = -EFAULT;
+                        break;
+                    }
+                    read += block->dma_size;
+                    pciedev_bufring_release_buffer(module_dev_pp, block);
+                } 
+                else
+                {
+                    retval = -EFAULT;
+                    break;
+                }
+            }
+            
+            break;
+        }   
+            
         case PCIEDEV_REQUEST_READ_DMA:
             mutex_unlock(&dev->dev_mut);
             

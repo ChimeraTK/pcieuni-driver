@@ -14,7 +14,7 @@ void hex_dump(void* tgtBuffer, int size)
     for (int i = 0; i < size; i++)
     {
         if (i%8 == 0) cout << endl;
-        int b = ((char*)tgtBuffer)[i];
+        int b = 0xFF & ((char*)tgtBuffer)[i];
         cout << " " << setw(2) << setfill('0') << b;
     }
     cout << dec << endl;
@@ -57,13 +57,30 @@ device_ioctrl_kbuf_info TDevice::KbufInfo()
     return info;
 }
 
-int TDevice::RegWrite(int bar, long offset, unsigned char* data, long dataSize)
+int TDevice::RegWrite(int bar, long offset, unsigned int data, long dataSize)
 {
     struct device_rw rw;
     rw.offset_rw = offset;
     rw.data_rw   = 0;
-    rw.data_rw   = *(reinterpret_cast<u_int*>(data));
-    rw.mode_rw   = RW_D32;
+    rw.data_rw   = data;
+    if (dataSize = 1)
+    {    
+        rw.mode_rw   = RW_D8;
+    }
+    else if (dataSize = 2)
+    {    
+        rw.mode_rw   = RW_D16;
+    }
+    else if (dataSize = 4)
+    {    
+        rw.mode_rw   = RW_D32;
+    }    
+    else
+    {    
+        dataSize     = 1;
+        rw.mode_rw   = RW_D8;
+    }
+    
     rw.barx_rw   = bar;
     rw.size_rw   = 0;
     rw.rsrvd_rw  = 0;
@@ -115,6 +132,12 @@ int TDevice::KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) const
     return ioctl(fHandle, PCIEDEV_KBUF_READ_DMA, buffer);
 }
 
+int TDevice::KringReadDma(device_ioctrl_dma& dma_rw, char* buffer) const
+{
+    memcpy(buffer, &dma_rw, sizeof(dma_rw));
+    return ioctl(fHandle, PCIEDEV_KRING_READ_DMA, buffer);
+}
+
 int TDevice::RequestReadDma(int offset, int bytes, int bytesPerCall)
 {
     TReadReq* req = new TReadReq(this, offset, bytes, bytesPerCall);
@@ -124,6 +147,7 @@ int TDevice::RequestReadDma(int offset, int bytes, int bytesPerCall)
     for (int retry = 5; (retry > 0) && (code != 0) ; retry--)
     {
         code = pthread_create(&fReadReqThread, NULL, &DoRequestReadDma, req);
+        pthread_detach(fReadReqThread);
     }
     
     if (code)

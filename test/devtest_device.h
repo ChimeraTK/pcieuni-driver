@@ -15,10 +15,11 @@ public:
     virtual bool StatusOk() const = 0;
     virtual const string Error() const = 0;
     virtual device_ioctrl_kbuf_info KbufInfo() = 0;
-    virtual int RegWrite(int bar, long offset, unsigned char* data, long dataSize) = 0; 
+    virtual int RegWrite(int bar, long offset, unsigned int data, long dataSize) = 0; 
     virtual int RegRead(int bar, long offset, unsigned char* data, long dataSize) = 0; 
     virtual int ReadDma(device_ioctrl_dma& dma_rw, char* buffer) const = 0;
     virtual int KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) const = 0;
+    virtual int KringReadDma(device_ioctrl_dma& dma_rw, char* buffer) const = 0;
     virtual int RequestReadDma(int offset, int bytes, int bytesPerCall) = 0;
     virtual int WaitReadDma(char* buffer, int offset, int bytes, int bytesPerCall)= 0;
     virtual void InitMMap(unsigned long bufsize) = 0;
@@ -42,7 +43,7 @@ public:
         return info;
     }
     
-    virtual int RegWrite(int bar, long offset, unsigned char* data, long dataSize)
+    virtual int RegWrite(int bar, long offset, unsigned int data, long dataSize)
     {
         return 0;
     }
@@ -59,6 +60,12 @@ public:
     }
 
     virtual int KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) const 
+    { 
+        usleep(10);
+        return 0; 
+    }
+
+    virtual int KringReadDma(device_ioctrl_dma& dma_rw, char* buffer) const 
     { 
         usleep(10);
         return 0; 
@@ -111,10 +118,11 @@ public:
     virtual bool   StatusOk() const;
     virtual const string Error() const;
     virtual device_ioctrl_kbuf_info KbufInfo();
-    virtual int RegWrite(int bar, long offset, unsigned char* data, long dataSize); 
+    virtual int RegWrite(int bar, long offset, unsigned int data, long dataSize); 
     virtual int RegRead(int bar, long offset, unsigned char* data, long dataSize); 
     virtual int ReadDma(device_ioctrl_dma& dma_rw, char* buffer) const;
     virtual int KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) const;
+    virtual int KringReadDma(device_ioctrl_dma& dma_rw, char* buffer) const;
     virtual int RequestReadDma(int offset, int bytes, int bytesPerCall);
     virtual int Ioctl(long unsigned int req, device_ioctrl_dma* dma_rw, char* tgtBuffer = NULL);
     virtual int WaitReadDma(char* buffer, int offset, int bytes, int bytesPerCall);
