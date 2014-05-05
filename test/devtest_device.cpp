@@ -41,6 +41,11 @@ const string TDevice::Error() const
     return fError;
 }
 
+void TDevice::ResetStatus()
+{
+    fError.clear();
+}
+
 device_ioctrl_kbuf_info TDevice::KbufInfo()
 {
     device_ioctrl_kbuf_info info;
@@ -120,22 +125,24 @@ int TDevice::RegRead(int bar, long offset, unsigned char* data, long dataSize)
     return 0;
 }
 
-int TDevice::ReadDma(device_ioctrl_dma& dma_rw, char* buffer) const
+int TDevice::ReadDma(device_ioctrl_dma& dma_rw, char* buffer)
 {
-    memcpy(buffer, &dma_rw, sizeof(dma_rw));
-    return ioctl(fHandle, PCIEDEV_READ_DMA, buffer);
+    return this->Ioctl(PCIEDEV_READ_DMA, &dma_rw, buffer);
 }
 
-int TDevice::KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) const
+int TDevice::KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer)
 {
-    memcpy(buffer, &dma_rw, sizeof(dma_rw));
-    return ioctl(fHandle, PCIEDEV_KBUF_READ_DMA, buffer);
+    return this->Ioctl(PCIEDEV_KBUF_READ_DMA, &dma_rw, buffer);
 }
 
-int TDevice::KringReadDma(device_ioctrl_dma& dma_rw, char* buffer) const
+int TDevice::KringReadDma(device_ioctrl_dma& dma_rw, char* buffer)
 {
-    memcpy(buffer, &dma_rw, sizeof(dma_rw));
-    return ioctl(fHandle, PCIEDEV_KRING_READ_DMA, buffer);
+    return this->Ioctl(PCIEDEV_KRING_READ_DMA, &dma_rw, buffer);
+}
+
+int TDevice::KringReadDmaNoCopy(device_ioctrl_dma& dma_rw, char* buffer)
+{
+    return this->Ioctl(PCIEDEV_KRING_READ_DMA_NOCOPY, &dma_rw, buffer);
 }
 
 int TDevice::RequestReadDma(int offset, int bytes, int bytesPerCall)
