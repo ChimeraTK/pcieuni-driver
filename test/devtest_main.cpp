@@ -4,300 +4,15 @@
 #include <vector>
 #include <map>
 #include <memory>
-#include <math.h>
 
 #include "devtest_device.h"
 #include "devtest_timer.h"
 #include "pciedev_io.h"
+#include "devtest_test.h"
 
 
 using namespace std;
 
-
-class TTest
-{
-public:
-    typedef bool (TFn)(IDevice* device, TTest* test);
-    
-    TFn*         fTestFn;
-    string       fTestName;
-    long         fStartOffset;
-    long         fBytesPerTest;
-    int          fNRuns;
-    long         fBlockBytes;
-    long         fDoneBytes;
-    string       fDevError;
-    
-    unique_ptr<TTimer> fTimeStart;
-    unique_ptr<TTimer> fTimeEnd;
-    
-    vector<unique_ptr<TTimer> > fStartTimers;
-    vector<unique_ptr<TTimer> > fEndTimers;
-    
-    vector<char> fBuffer;
-
-    void Init(char* testName, TFn* testFn, long startOffset, long bytesPerTest, int nRuns, long blockBytes)
-    {
-        fTestName    = testName;
-        fTestFn      = testFn;
-        fStartOffset = startOffset;
-        fBytesPerTest = bytesPerTest;
-        fNRuns       = nRuns;
-        fBlockBytes  = blockBytes;
-        fDoneBytes   = 0;
-        fDevError    = "";
-        fBuffer.resize(fBytesPerTest);
-        fStartTimers.resize(nRuns);
-        fEndTimers.resize(nRuns);
-        
-        fill(fBuffer.begin(),fBuffer.end(), 0x42);
-    }
-
-    bool Run(IDevice* device, bool silent = false)
-    {
-        if (this->fBlockBytes <= 0)
-        {
-            device_ioctrl_kbuf_info kbufInfo = device->KbufInfo();
-            this->fBlockBytes = kbufInfo.block_size;
-        }
-            
-        if (!silent) this->PrintHead(cout);
-        this->fTestFn(device, this);
-        if (!silent) this->PrintResult(cout);
-    }
-    
-    void UpdateBytesDone(long newBytes)
-    {
-        fDoneBytes += newBytes;
-    }
-    
-    void PrintHead(ostream& file)
-    {
-        file << endl << endl << endl;
-        file << "**********************************************" << endl;
-        file << "*** TEST: " << fTestName << endl;
-        file << "***"                     << endl;
-        file << "*** DMA offset         : " << hex << fStartOffset << dec << endl;
-        file << "*** transfer size (kB) : " << fBytesPerTest/1024 << endl;
-        file << "*** block size    (kB) : " << fBlockBytes/1024 << endl;
-        file << "*** number of test runs: " << fNRuns << endl;
-        file << "**********************************************" << endl;
-    }
-    
-    void PrintInfo(ostream& file, const char* info)
-    {
-        file << "*** " << info << endl;
-    }
-    
-    bool StatusOK()
-    {
-        return (fDoneBytes == fBytesPerTest * fNRuns) && fDevError.empty();
-    }
-    
-
-    void PrintResult(ostream& file)
-    {
-        file << "**********************************************"  << endl;
-        
-        if (this->StatusOK())
-        {
-            TTimer timeTotal = *fTimeEnd   - *fTimeStart;
-            file << "*** RESULT: OK!" << endl;
-            file << "*** " << endl;
-            file << "*** Total clock time:        " << setw(10) << timeTotal.RealTime() << " us" << " (Speed = " << fDoneBytes / timeTotal.RealTime() << " MB/s)" << endl;
-            file << "*** Total CPU time:          " << setw(10) << timeTotal.CpuTime()   << " us" << endl;  
-            file << "*** Total userspace time:    " << setw(10) << timeTotal.UserTime()   << " us" << endl;  
-            file << "*** Total kernel time:       " << setw(10) << timeTotal.KernelTime()   << " us" << endl;  
-            file << "*** " << endl;
-            
-            int clkTimePerTest = timeTotal.RealTime()/fNRuns;
-            int cpuTimePerTest = timeTotal.CpuTime()/fNRuns;
-            int kerTimePerTest = timeTotal.KernelTime()/fNRuns;
-            int usrTimePerTest = timeTotal.UserTime()/fNRuns;
-            int clkTimeTo4k   = 0;
-            int clkTimeTo16k  = 0;
-            int clkTimeTo128k = 0;
-            int clkTimeTo1M   = 0;
-            
-            file << "*** Average test times       " << endl;
-            file << "***       Clock time:        " << setw(10) << clkTimePerTest << " us" << endl;
-            file << "***       CPU time:          " << setw(10) << cpuTimePerTest  << " us" << endl;  
-            file << "***       kernel time:       " << setw(10) << kerTimePerTest  << " us" << endl;  
-            file << "***       userspace time:    " << setw(10) << usrTimePerTest  << " us" << endl;  
-            
-            long timePerTest = timeTotal.RealTime()/fNRuns;
-            int  nBlocks = (fBytesPerTest + fBlockBytes - 1) / fBlockBytes;
-            if (fBytesPerTest >= 1024*4)
-            {
-                int blkIdx  = (1024*4 + fBlockBytes - 1) / fBlockBytes;
-                clkTimeTo4k = timePerTest * blkIdx / nBlocks;
-                file << "***       Clock time to 4k:  " << setw(10) << clkTimeTo4k << " us" << endl;
-            }
-            
-            if (fBytesPerTest >= 1024*16)
-            {
-                int blkIdx  = (1024*16 + fBlockBytes - 1) / fBlockBytes;
-                clkTimeTo16k = timePerTest * blkIdx / nBlocks;
-                file << "***       Clock time to 16k: " << setw(10) << clkTimeTo16k << " us" << endl;
-            }
-            
-            if (fBytesPerTest >= 1024*128)
-            {
-                int blkIdx  = (1024*128 + fBlockBytes - 1) / fBlockBytes;
-                clkTimeTo128k = timePerTest * blkIdx / nBlocks;
-                file << "***       Clock time to 128k:" << setw(10) << clkTimeTo128k << " us" << endl;
-            }
-            
-            if (fBytesPerTest >= 1024*1024)
-            {
-                int blkIdx  = (1024*1024 + fBlockBytes - 1) / fBlockBytes;
-                clkTimeTo1M = timePerTest * blkIdx / nBlocks;
-                file << "***       Clock time to 1M:  " << setw(10) << clkTimeTo1M << " us" << endl;
-            }
-            
-            file << "**********************************************"  << endl;
-            file << "*** " 
-                 << clkTimePerTest << "\t" 
-                 << cpuTimePerTest << "\t" 
-                 << kerTimePerTest << "\t"
-                 << clkTimeTo4k << "\t"
-                 << clkTimeTo16k << "\t"
-                 << clkTimeTo128k << "\t"
-                 << clkTimeTo1M << endl;
-        }
-        else
-        {
-            file << "*** RESULT: ERROR!" << endl;
-            file << "***"                << endl;
-            file << "*** Processed " << fDoneBytes << " of " << fBytesPerTest << " bytes" << endl; 
-            file << "*** Device error: " << fDevError << endl;
-            file << "**********************************************"  << endl;
-        }
-    }    
-
-    void PrintStat(ostream& file)
-    {
-        if (this->StatusOK())
-        {
-//             TTimer timeTotal = *fTimeEnd - *fTimeStart;
-//             int clkTimePerTest = timeTotal.RealTime()/fNRuns;
-//             int cpuTimePerTest = timeTotal.CpuTime()/fNRuns;
-//             int kerTimePerTest = timeTotal.KernelTime()/fNRuns;
-//             int usrTimePerTest = timeTotal.UserTime()/fNRuns;
-//             long timePerTest = timeTotal.RealTime()/fNRuns;
-//             int  nBlocks = (fBytesPerTest + fBlockBytes - 1) / fBlockBytes;
-//             if (fBytesPerTest >= 1024*4)
-//             {
-//                 int blkIdx  = (1024*4 + fBlockBytes - 1) / fBlockBytes;
-//                 clkTimeTo4k = timePerTest * blkIdx / nBlocks;
-//             }
-//             
-//             if (fBytesPerTest >= 1024*16)
-//             {
-//                 int blkIdx  = (1024*16 + fBlockBytes - 1) / fBlockBytes;
-//                 clkTimeTo16k = timePerTest * blkIdx / nBlocks;
-//             }
-//             
-//             if (fBytesPerTest >= 1024*128)
-//             {
-//                 int blkIdx  = (1024*128 + fBlockBytes - 1) / fBlockBytes;
-//                 clkTimeTo128k = timePerTest * blkIdx / nBlocks;
-//             }
-//             
-//             if (fBytesPerTest >= 1024*1024)
-//             {
-//                 int blkIdx  = (1024*1024 + fBlockBytes - 1) / fBlockBytes;
-//                 clkTimeTo1M = timePerTest * blkIdx / nBlocks;
-//             }
-            
-            // calculate averages
-            double clkTimePerTestS = 0; 
-            double cpuTimePerTestS = 0;
-            double kerTimePerTestS = 0;
-            double usrTimePerTestS = 0;
-            
-            for (int i = 0; i < fEndTimers.size(); i++)
-            {
-                TTimer timeTotal = *fEndTimers[i] - *fStartTimers[i];
-                
-                clkTimePerTestS += timeTotal.RealTime();
-                cpuTimePerTestS += timeTotal.CpuTime();
-                kerTimePerTestS += timeTotal.KernelTime();
-                usrTimePerTestS += timeTotal.UserTime();
-            }
-            clkTimePerTestS = clkTimePerTestS / fEndTimers.size();
-            cpuTimePerTestS = cpuTimePerTestS / fEndTimers.size();
-            kerTimePerTestS = kerTimePerTestS / fEndTimers.size();
-            usrTimePerTestS = usrTimePerTestS / fEndTimers.size();
-            
-            // calculate deviations
-            double clkTimePerTestD = 0; 
-            double cpuTimePerTestD = 0;
-            double kerTimePerTestD = 0;
-            double usrTimePerTestD = 0;
-            
-            for (int i = 0; i < fEndTimers.size(); i++)
-            {
-                TTimer timeTotal = *fEndTimers[i] - *fStartTimers[i];
-                clkTimePerTestD += (timeTotal.RealTime() - clkTimePerTestS) * (timeTotal.RealTime() - clkTimePerTestS);
-                cpuTimePerTestD += (timeTotal.CpuTime()  - cpuTimePerTestS) * (timeTotal.CpuTime()  - cpuTimePerTestS);
-                kerTimePerTestD += (timeTotal.KernelTime() - kerTimePerTestS) * (timeTotal.KernelTime() - kerTimePerTestS);
-                usrTimePerTestD += (timeTotal.UserTime() - usrTimePerTestS) * (timeTotal.UserTime() - usrTimePerTestS);
-            }
-            clkTimePerTestD = 100*sqrt(clkTimePerTestD/fEndTimers.size())/clkTimePerTestS;
-            cpuTimePerTestD = 100*sqrt(cpuTimePerTestD/fEndTimers.size())/cpuTimePerTestS;
-            kerTimePerTestD = 100*sqrt(kerTimePerTestD/fEndTimers.size())/kerTimePerTestS;
-            usrTimePerTestD = 100*sqrt(usrTimePerTestD/fEndTimers.size())/usrTimePerTestS;
-            
-            // calculate time to data
-            int clkTimeTo4k   = 0;
-            int clkTimeTo16k  = 0;
-            int clkTimeTo128k = 0;
-            int clkTimeTo1M   = 0;
-            int nBlocks = (fBytesPerTest + fBlockBytes - 1) / fBlockBytes;
-            if (fBytesPerTest >= 1024*4)
-            {
-                int blkIdx  = (1024*4 + fBlockBytes - 1) / fBlockBytes;
-                clkTimeTo4k = clkTimePerTestS * blkIdx / nBlocks;
-            }
-            
-            if (fBytesPerTest >= 1024*16)
-            {
-                int blkIdx  = (1024*16 + fBlockBytes - 1) / fBlockBytes;
-                clkTimeTo16k = clkTimePerTestS * blkIdx / nBlocks;
-            }
-            
-            if (fBytesPerTest >= 1024*128)
-            {
-                int blkIdx  = (1024*128 + fBlockBytes - 1) / fBlockBytes;
-                clkTimeTo128k = clkTimePerTestS * blkIdx / nBlocks;
-            }
-            
-            if (fBytesPerTest >= 1024*1024)
-            {
-                int blkIdx  = (1024*1024 + fBlockBytes - 1) / fBlockBytes;
-                clkTimeTo1M = clkTimePerTestS * blkIdx / nBlocks;
-            }
-            
-            
-            file << fTestName << "\t"
-                 << fBytesPerTest / clkTimePerTestS << "\t" 
-                 << fixed << setprecision(0) << clkTimePerTestS << "\t" << fixed << setprecision(1) << clkTimePerTestD << "\t"
-                 << fixed << setprecision(0) << cpuTimePerTestS << "\t" << fixed << setprecision(1) << cpuTimePerTestD << "\t"
-                 << fixed << setprecision(0) << kerTimePerTestS << "\t" << fixed << setprecision(1) << kerTimePerTestD << "\t"
-                 << fixed << setprecision(0) << usrTimePerTestS << "\t" << fixed << setprecision(1) << usrTimePerTestD << "\t"
-                 << clkTimeTo4k << "\t"
-                 << clkTimeTo16k << "\t"
-                 << clkTimeTo128k << "\t"
-                 << clkTimeTo1M <<  "\t" << endl;
-        }
-        else
-        {
-            file << "Device error: " << fDevError << endl;
-        }
-    }    
-    
-};
 
 enum TMainMenuOption
 {
@@ -324,7 +39,11 @@ enum TMainMenuOption
     MAIN_MENU_PERFORMANCE_TEST_KRING_16MB,
     MAIN_MENU_PERFORMANCE_TEST_ASYNC_16MB,
     MAIN_MENU_PERFORMANCE_TEST_MMAP_16MB,
-    MAIN_MENU_PERFORMANCE_TEST_ALL_16MB,
+    MAIN_MENU_PERFORMANCE_TEST_ALL_16MB_10HZ,
+
+    MAIN_MENU_PERFORMANCE_TEST_READ_16MB_10HZ,
+    MAIN_MENU_PERFORMANCE_TEST_KBUF_16MB_10HZ,
+    MAIN_MENU_PERFORMANCE_TEST_KRING_16MB_10HZ,
     
     MAIN_MENU_STRESS_TEST,
     MAIN_MENU_EXIT
@@ -351,7 +70,10 @@ TMainMenuOption GetMainMenuChoice()
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_KRING_16MB,"16 MB perfomance test: Kernel ring buffer DMA"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_ASYNC_16MB,"16 MB perfomance test: Async kernel ring buffer DMA"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_MMAP_16MB, "16 MB perfomance test: MMAP DMA"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_ALL_16MB,  "16 MB perfomance test: ALL"));
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_ALL_16MB_10HZ,  "16 MB perfomance test: ALL"));
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_READ_16MB_10HZ, "16 MB read 10 times per second: Simple DMA"));
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_KBUF_16MB_10HZ, "16 MB read 10 times per second: Single kernel buffer DMA"));
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_KRING_16MB_10HZ,"16 MB read 10 times per second: Kernel ring buffer DMA"));
     //    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_STRESS_TEST,                "Stress test"));
     
     cout << endl << endl << endl;
@@ -517,168 +239,110 @@ void DumpBuffer(vector<char>& buffer)
 }
 
 
-bool TestDmaRead(IDevice* device, TTest* test)
+void TestDmaRead(IDevice* device, TTest* test)
 {
     int code = 0;
     
-    test->fTimeStart.reset(new TTimer());
-    for (int i = 0; (code == 0) && (i < test->fNRuns); i++)
-    {
-        long offset = test->fStartOffset;
-        long bytes  = test->fBytesPerTest;
-        long bytesRead = 0;
-        
-        test->fStartTimers[i].reset(new TTimer());
-        for (; bytes > 0 ; )
-        {
-            long bytesToRead = min<int>(bytes, test->fBlockBytes);
-            
-            static device_ioctrl_dma dma_rw;
-            dma_rw.dma_cmd     = 0;
-            dma_rw.dma_pattern = 0; 
-            dma_rw.dma_size    = bytesToRead;
-            dma_rw.dma_offset  = offset;
-            
-            code = device->ReadDma(dma_rw, &test->fBuffer[bytesRead]);
-            if (code != 0) break;
-            
-            bytesRead += bytesToRead;
-            bytes     -= bytesToRead;
-            offset    += bytesToRead; 
-        }
-        test->UpdateBytesDone(bytesRead);
-        test->fEndTimers[i].reset(new TTimer());
-        
-    }
-    test->fTimeEnd.reset(new TTimer());
-    test->fDevError = device->Error();
-}
-
-
-bool TestKbufDmaRead(IDevice* device, TTest* test)
-{
-    int code = 0;
+    long offset = test->fStartOffset;
+    long bytes  = test->fBytesPerTest;
+    long bytesRead = 0;
     
-    test->fTimeStart.reset(new TTimer());
-    for (int i = 0; (code == 0) && (i < test->fNRuns); i++)
+    for (; bytes > 0 ; )
     {
-        long offset    = test->fStartOffset;
-        long bytes     = test->fBytesPerTest;
-        long bytesRead = 0;
+        long bytesToRead = min<int>(bytes, test->fBlockBytes);
         
-        test->fStartTimers[i].reset(new TTimer());
-        
-        for (; bytes > 0 ; )
-        {
-            long bytesToRead = min<int>(bytes, test->fBlockBytes);
-            
-            static device_ioctrl_dma dma_rw;
-            dma_rw.dma_cmd     = 0;
-            dma_rw.dma_pattern = 0; 
-            dma_rw.dma_size    = bytesToRead;
-            dma_rw.dma_offset  = offset;
-            
-            code = device->KbufReadDma(dma_rw, &test->fBuffer[bytesRead]);
-            if (code != 0) 
-            {
-                break;
-            }
-            
-            bytesRead += bytesToRead;
-            bytes     -= bytesToRead;
-            offset    += bytesToRead; 
-        }
-        test->UpdateBytesDone(bytesRead);
-        test->fEndTimers[i].reset(new TTimer());
-        
-    }
-    test->fTimeEnd.reset(new TTimer());
-    test->fDevError = device->Error();
-    
-    return true;
-}
-
-bool TestKringDmaRead(IDevice* device, TTest* test)
-{
-    int code = 0;
-    
-    test->fTimeStart.reset(new TTimer());
-    for (int i = 0; (code == 0) && (i < test->fNRuns); i++)
-    {
-        test->fStartTimers[i].reset(new TTimer());
-
         static device_ioctrl_dma dma_rw;
         dma_rw.dma_cmd     = 0;
         dma_rw.dma_pattern = 0; 
-        dma_rw.dma_size    = test->fBytesPerTest;
-        dma_rw.dma_offset  = test->fStartOffset;
-
-        code = device->KringReadDma(dma_rw, &test->fBuffer[0]);
-        test->UpdateBytesDone(test->fBytesPerTest);
-        test->fEndTimers[i].reset(new TTimer());
+        dma_rw.dma_size    = bytesToRead;
+        dma_rw.dma_offset  = offset;
+        
+        code = device->ReadDma(dma_rw, &test->fBuffer[bytesRead]);
+        if (code != 0) break;
+        
+        bytesRead += bytesToRead;
+        bytes     -= bytesToRead;
+        offset    += bytesToRead; 
     }
-    
-    test->fTimeEnd.reset(new TTimer());
-    test->fDevError = device->Error();
-    
-    return true;
+    test->UpdateStatus(bytesRead, device->Error());
 }
 
-bool TestAsyncDmaRead(IDevice* device,  TTest* test)
+
+void TestKbufDmaRead(IDevice* device, TTest* test)
 {
-    //test->PrintInfo(cout, "Reading... ");
+    int code = 0;
     
-    test->fTimeStart.reset(new TTimer());
-    for (int i = 0; i< test->fNRuns; i++)
+    long offset    = test->fStartOffset;
+    long bytes     = test->fBytesPerTest;
+    long bytesRead = 0;
+        
+    for (; bytes > 0 ; )
     {
-        long bytesRead = 0;
-        test->fStartTimers[i].reset(new TTimer());
+        long bytesToRead = min<int>(bytes, test->fBlockBytes);
         
-        if (!device->RequestReadDma(test->fStartOffset, test->fBytesPerTest, test->fBlockBytes))
+        static device_ioctrl_dma dma_rw;
+        dma_rw.dma_cmd     = 0;
+        dma_rw.dma_pattern = 0; 
+        dma_rw.dma_size    = bytesToRead;
+        dma_rw.dma_offset  = offset;
+        
+        code = device->KbufReadDma(dma_rw, &test->fBuffer[bytesRead]);
+        if (code != 0) 
         {
-            bytesRead = device->WaitReadDma(&test->fBuffer[0], test->fStartOffset, test->fBytesPerTest, test->fBlockBytes);
+            break;
         }
-        test->UpdateBytesDone(bytesRead);    
-        test->fEndTimers[i].reset(new TTimer());
         
+        bytesRead += bytesToRead;
+        bytes     -= bytesToRead;
+        offset    += bytesToRead; 
     }
-    test->fTimeEnd.reset(new TTimer());
-    test->fDevError = device->Error();
-    
-    return true;
+    test->UpdateStatus(bytesRead, device->Error());
 }
 
-bool TestMMapRead(IDevice* device, TTest* test)
+void TestKringDmaRead(IDevice* device, TTest* test)
 {
-    long totalBytesRead = 0;
+    int code = 0;
     
-    //test->PrintInfo(cout, "Mapping driver memory buffers... ");
-    device->InitMMap(test->fBlockBytes);
+    static device_ioctrl_dma dma_rw;
+    dma_rw.dma_cmd     = 0;
+    dma_rw.dma_pattern = 0; 
+    dma_rw.dma_size    = test->fBytesPerTest;
+    dma_rw.dma_offset  = test->fStartOffset;
+    code = device->KringReadDma(dma_rw, &test->fBuffer[0]);
+    test->UpdateStatus(code ? 0 : test->fBytesPerTest, device->Error());
+}
+
+void TestKringDmaReadNoCopy(IDevice* device, TTest* test)
+{
+    int code = 0;
     
-    //test->PrintInfo(cout, "Reading... ");
-    
-    test->fTimeStart.reset(new TTimer());
-    for (int i = 0; i< test->fNRuns; i++)
+    static device_ioctrl_dma dma_rw;
+    dma_rw.dma_cmd     = 0;
+    dma_rw.dma_pattern = 0; 
+    dma_rw.dma_size    = test->fBytesPerTest;
+    dma_rw.dma_offset  = test->fStartOffset;
+    code = device->KringReadDmaNoCopy(dma_rw, &test->fBuffer[0]);
+    test->UpdateStatus(code ? 0 : test->fBytesPerTest, device->Error());
+}
+
+void TestAsyncDmaRead(IDevice* device,  TTest* test)
+{
+    long bytesRead = 0;
+    if (!device->RequestReadDma(test->fStartOffset, test->fBytesPerTest, test->fBlockBytes))
     {
-        long bytesRead = 0;
-        test->fStartTimers[i].reset(new TTimer());
-        
-        if (!device->RequestReadDma(test->fStartOffset, test->fBytesPerTest, test->fBlockBytes)) 
-        {
-            bytesRead = device->CollectMMapRead(&test->fBuffer[0], test->fStartOffset, test->fBytesPerTest, test->fBlockBytes);
-        }
-        
-        test->UpdateBytesDone(bytesRead);    
-        test->fEndTimers[i].reset(new TTimer());
-        
+        bytesRead = device->WaitReadDma(&test->fBuffer[0], test->fStartOffset, test->fBytesPerTest, test->fBlockBytes);
     }
-    test->fTimeEnd.reset(new TTimer());
-    test->fDevError = device->Error();
-    
-    //test->PrintInfo(cout, "Clear memory mappings... ");
-    device->ReleaseMMap();
-    
-    return true;
+    test->UpdateStatus(bytesRead, device->Error());    
+}
+
+void TestMMapRead(IDevice* device, TTest* test)
+{
+    long bytesRead = 0;
+    if (!device->RequestReadDma(test->fStartOffset, test->fBytesPerTest, test->fBlockBytes)) 
+    {
+        bytesRead = device->CollectMMapRead(&test->fBuffer[0], test->fStartOffset, test->fBytesPerTest, test->fBlockBytes);
+    }
+    test->UpdateStatus(bytesRead, device->Error());    
 }
 
 void StressTest(IDevice* device)
@@ -982,7 +646,9 @@ int main(int argc, char *argv[])
                 long offset = GetOffsetChoice();
                 long bytes  = GetTotalBytesChoice();
                 
-                testLog.Init("Simple DMA read", &TestDmaRead, offset, bytes, 1, bytes);
+                testLog.Init("Simple DMA read", &TestDmaRead, offset, bytes, 1, 0);
+                testLog.Run(device.get());
+                
                 break;
             }
             
@@ -991,7 +657,9 @@ int main(int argc, char *argv[])
                 long offset = GetOffsetChoice();
                 long bytes  = GetTotalBytesChoice();
                 
-                testLog.Init("Kernel buffer read", &TestKbufDmaRead, offset, bytes, 1, bytes);
+                testLog.Init("Kernel buffer read", &TestKbufDmaRead, offset, bytes, 1, 0);
+                testLog.Run(device.get());
+                
                 break;
             }
 
@@ -1000,7 +668,9 @@ int main(int argc, char *argv[])
                 long offset = GetOffsetChoice();
                 long bytes  = GetTotalBytesChoice();
                 
-                testLog.Init("Kernel ring buffer read", &TestKringDmaRead, offset, bytes, 1, -1);
+                testLog.Init("Kernel ring buffer read", &TestKringDmaRead, offset, bytes, 1, 0);
+                testLog.Run(device.get());
+                
                 break;
             }
             
@@ -1009,7 +679,9 @@ int main(int argc, char *argv[])
                 long offset = GetOffsetChoice();
                 long bytes  = GetTotalBytesChoice();
                 long block  = GetBlockBytesChoice();
-                testLog.Init("Simple DMA read", &TestDmaRead, offset, bytes, 1, block);
+                testLog.Init("Simple DMA read", &TestDmaRead, offset, bytes, 1, 0);
+                testLog.Run(device.get());
+                
                 break;
             }
 
@@ -1019,65 +691,101 @@ int main(int argc, char *argv[])
                 long bytes  = GetTotalBytesChoice();
                 long block  = GetBlockBytesChoice();
                 
-                testLog.Init("Kernel buffer read", &TestKbufDmaRead, offset, bytes, 1, block);
+                testLog.Init("Kernel buffer read", &TestKbufDmaRead, offset, bytes, 1, 0);
+                testLog.Run(device.get());
+                
                 break;
             }
 
             case MAIN_MENU_KRING_DMA_READ_512MB:
-                testLog.Init("Kernel ring buffer read", &TestAsyncDmaRead, 0, 512*1024*1024, 1, -1);
+                testLog.Init("Kernel ring buffer read", &TestAsyncDmaRead, 0, 512*1024*1024, 1, 0);
+                testLog.Run(device.get());
+                
                 break;
             
             case MAIN_MENU_MMAP_DMA_READ_512MB:
-                testLog.Init("MMAP read", &TestMMapRead, 0, 512*1024*1024, 1, -1);
+                testLog.Init("MMAP read", &TestMMapRead, 0, 512*1024*1024, 1, 0);
+                testLog.Run(device.get(), true);
+                
                 break;
 
             case MAIN_MENU_PERFORMANCE_TEST_READ_16MB:
-                testLog.Init("Simple DMA read", &TestDmaRead, 0, 16*1024*1024, 64, -1);
+                testLog.Init("Simple DMA read", &TestDmaRead, 0, 16*1024*1024, 200, 0);
+                testLog.Run(device.get());
+                
                 break;
             
             case MAIN_MENU_PERFORMANCE_TEST_KBUF_16MB:
-                testLog.Init("Kernel buffer read", &TestKbufDmaRead, 0, 16*1024*1024, 64, -1);
+                testLog.Init("Kernel buffer read", &TestKbufDmaRead, 0, 16*1024*1024, 200, 0);
+                testLog.Run(device.get());
+                
                 break;
 
             case MAIN_MENU_PERFORMANCE_TEST_KRING_16MB:
-                testLog.Init("Kernel buffer ring read", &TestKbufDmaRead, 0, 16*1024*1024, 64, -1);
+                testLog.Init("Kernel buffer ring read", &TestKringDmaRead, 0, 16*1024*1024, 200, 0);
+                testLog.Run(device.get());
+                
                 break;
                 
             case MAIN_MENU_PERFORMANCE_TEST_ASYNC_16MB:
-                testLog.Init("Kernel ring buffer read", &TestAsyncDmaRead, 0, 16*1024*1024, 64, -1);
+                testLog.Init("Kernel ring buffer read", &TestAsyncDmaRead, 0, 16*1024*1024, 200, 0);
+                testLog.Run(device.get());
+                
                 break;
             
             case MAIN_MENU_PERFORMANCE_TEST_MMAP_16MB:
-                testLog.Init("MMAP read", &TestMMapRead, 0, 16*1024*1024, 64, -1);
+                testLog.Init("MMAP read", &TestMMapRead, 0, 16*1024*1024, 200, 0);
+                testLog.Run(device.get(), true);
+                
                 break;
-            
-            case MAIN_MENU_PERFORMANCE_TEST_ALL_16MB:
+
+            case MAIN_MENU_PERFORMANCE_TEST_READ_16MB_10HZ:
+                testLog.Init("Simple DMA read", &TestDmaRead, 0, 16*1024*1024, 200, 100000);
+                testLog.Run(device.get());
+                break;
+                
+            case MAIN_MENU_PERFORMANCE_TEST_KBUF_16MB_10HZ:
+                testLog.Init("Simple DMA read", &TestKbufDmaRead, 0, 16*1024*1024, 200, 100000);
+                testLog.Run(device.get());
+                break;
+                
+            case MAIN_MENU_PERFORMANCE_TEST_KRING_16MB_10HZ:
+                testLog.Init("Simple DMA read", &TestKringDmaRead, 0, 16*1024*1024, 200, 100000);
+                testLog.Run(device.get());
+                break;
+
+                
+            case MAIN_MENU_PERFORMANCE_TEST_ALL_16MB_10HZ:
             {
                 int nRuns = 200;
                 
-                cout << "Test name              " << "\t"
-                << "MB/s" << "\t" 
-                << "Clk(us)" << "\t" << fixed << setprecision(1) << "er(%)" << "\t"
-                << "Cpu(us)" << "\t" << fixed << setprecision(1) << "er(%)" << "\t"
-                << "Krn(us)" << "\t" << fixed << setprecision(1) << "er(%)" << "\t"
-                << "Usr(us)" << "\t" << fixed << setprecision(1) << "er(%)" << "\t"
-                << "us 4k" << "\t"
-                << "us 16k" << "\t"
-                << "us 128k" << "\t"
-                << "us 1M" << "\t" << endl;
+                cout << "Test name                        " << "\t"
+                     << "MB/s"  << "\t" 
+                     << "Cpu(%)"  << "\t"
+                     << "tClk(us)" << "\t" << fixed << setprecision(1) << "er(%)" << "\t"
+                     << "tCpu(us)" << "\t" << fixed << setprecision(1) << "er(%)" << "\t"
+                     << "tKrn(us)" << "\t" << fixed << setprecision(1) << "er(%)" << "\t"
+                     << "tUsr(us)" << "\t" << fixed << setprecision(1) << "er(%)" << "\t"
+                     << endl;
 
-                testLog.Init("Simple DMA read        ", &TestDmaRead, 0, 16*1024*1024, nRuns, -1);
-                testLog.Run(device.get(), true);
+                testLog.Init("Simple DMA read                  ", &TestDmaRead, 0, 16*1024*1024, nRuns, 100000);
+                testLog.Run(device.get(), false, true);
                 testLog.PrintStat(cout);
-                testLog.Init("Kernel buffer read     ", &TestKbufDmaRead, 0, 16*1024*1024, nRuns, -1);
-                testLog.Run(device.get(), true);
+                testLog.Init("DMA read using single buffer     ", &TestKbufDmaRead, 0, 16*1024*1024, nRuns, 100000);
+                testLog.Run(device.get(), false, true);
                 testLog.PrintStat(cout);
-                testLog.Init("Kernel ring buffer read", &TestAsyncDmaRead, 0, 16*1024*1024, nRuns, -1);
-                testLog.Run(device.get(), true);
+                testLog.Init("Async DMA read using ring buffer ", &TestAsyncDmaRead, 0, 16*1024*1024, nRuns, 100000);
+                testLog.Run(device.get(), false, true);
                 testLog.PrintStat(cout);
-                testLog.Init("MMAP read              ", &TestMMapRead, 0, 16*1024*1024, nRuns, -1);
-                testLog.Run(device.get(), true);
+                testLog.Init("DMA read using ring buffer      ", &TestKringDmaRead, 0, 16*1024*1024, nRuns, 100000);
+                testLog.Run(device.get(), false, true);
                 testLog.PrintStat(cout);
+                testLog.Init("DMA read simulated MMAP          ", &TestKringDmaReadNoCopy, 0, 16*1024*1024, nRuns, 100000);
+                testLog.Run(device.get(), false, true);
+                testLog.PrintStat(cout);
+//                 testLog.Init("Async DMA using MMAP buffer-ring ", &TestMMapRead, 0, 16*1024*1024, nRuns, 100000);
+//                 testLog.Run(device.get(), true, true);
+//                 testLog.PrintStat(cout);
                 
                 continue;
             }
@@ -1092,7 +800,6 @@ int main(int argc, char *argv[])
         
         if (!finished)
         {
-            testLog.Run(device.get());
             DumpBuffer(testLog.fBuffer);
         }
     }

@@ -77,7 +77,7 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
     
     if (dev->dma_buffer)
     {
-        PDEBUG("pciedev_interrupt(dma_offset=0x%lx, dma_size=0x%lx, drv_offset=0x%lx).\n", dev->dma_buffer->dma_offset, dev->dma_buffer->offset); 
+        PDEBUG("pciedev_interrupt(dma_offset=0x%lx, dma_size=0x%lx, drv_offset=0x%lx).\n", dev->dma_buffer->dma_offset, dev->dma_buffer->dma_size, dev->dma_buffer->offset); 
         
         dev->dma_buffer->dma_done = 1;
         dev->buffer_nrRead += 1;

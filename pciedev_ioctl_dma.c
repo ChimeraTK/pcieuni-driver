@@ -215,7 +215,8 @@ pciedev_block* pciedev_bufring_find_buffer(module_dev* dev, dma_desc* dma)
     list_for_each(ptr, &dev->dma_bufferList) 
     {
         block = list_entry(ptr, struct pciedev_block, list);
-        if ((block->dma_offset == dma->offset) && (block->dma_size == dma->trans_size))
+        //if ((block->dma_offset == dma->offset) && (block->dma_size == dma->trans_size))
+        if ((block->dma_offset == dma->offset) && !block->dma_free)
         {
             spin_unlock(&dev->dma_bufferList_lock);
             PDEBUG("SPIN-UNLOCKED\n");
@@ -374,7 +375,7 @@ int pciedev_wait_kring_dma(pciedev_dev *dev, device_ioctrl_dma* dma_arg, pciedev
         if (code <= 0)
         {
             printk(KERN_ALERT "PCIEDEV: Requested DMA buffer not found (dma_offset=0x%lx, dma_size=0x%lx): TIMEOUT!\n", desc.offset, desc.trans_size);
-            return -EFAULT;;
+            return -EFAULT;
         }
         else if (code < 0 )
         {
@@ -531,7 +532,7 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
             module_dev_pp->dev_dma_size     = tmp_dma_size;
              if(tmp_dma_size <= 0){
                  mutex_unlock(&dev->dev_mut);
-                 return EFAULT;
+                 return -EFAULT;
             }
             tmp_dma_trns_size    = tmp_dma_size;
             if((tmp_dma_size%PCIEDEV_DMA_SYZE)){
@@ -542,6 +543,11 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
             tmp_order = get_order(tmp_dma_trns_size);
             module_dev_pp->dma_order = tmp_order;
             pWriteBuf = (void *)__get_free_pages(GFP_KERNEL | __GFP_DMA, tmp_order);
+            if (!pWriteBuf) {
+                PDEBUG("pciedev_ioctl_dma(): Failed to allocate buffer of order %d", tmp_order);
+                mutex_unlock(&dev->dev_mut);
+                return -ENOMEM;
+            }
             
             PDEBUG("pciedev_ioctl_dma(): Allocated buffer: 0x%lx of order %d", pWriteBuf, tmp_order);
             
@@ -575,7 +581,7 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
                 pci_unmap_single(pdev, pTmpDmaHandle, tmp_dma_trns_size, PCI_DMA_FROMDEVICE);
                 free_pages((ulong)pWriteBuf, (ulong)module_dev_pp->dma_order);
                 mutex_unlock(&dev->dev_mut);
-                return EFAULT;
+                return -EFAULT;
             }
             pci_unmap_single(pdev, pTmpDmaHandle, tmp_dma_trns_size, PCI_DMA_FROMDEVICE);
              if (copy_to_user ((void *)arg, pWriteBuf, tmp_dma_size)) {
@@ -640,18 +646,23 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
                 return -EFAULT;
             }
             
-            if (!schedule_work(&module_dev_pp->dma_workData))
+            if (!schedule_work(&module_dev_pp->dma_work))
             {
                 mutex_unlock(&dev->dev_mut);
                 return -EFAULT;
             }
          
             int read = 0; 
+            device_ioctrl_dma part;
+            memcpy(&part, &module_dev_pp->dma_workData, sizeof(device_ioctrl_dma));
+            
             for (; read < module_dev_pp->dma_workData.dma_size; )
             {
                 pciedev_block* block;
                 
-                retval = pciedev_wait_kring_dma(dev, read + module_dev_pp->dma_workData.dma_offset, &block);
+                part.dma_offset = module_dev_pp->dma_workData.dma_offset + read;
+                
+                retval = pciedev_wait_kring_dma(dev, &part, &block);
                 if (block)
                 {
                     if (copy_to_user((void *)arg + read, block->kaddr, block->dma_size))
@@ -671,7 +682,45 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
             
             break;
         }   
+        case PCIEDEV_KRING_READ_DMA_NOCOPY: // Demonstrational only - does not copy data to user space
+        {
+            if (copy_from_user(&module_dev_pp->dma_workData, (void*)arg, io_dma_size)) {
+                mutex_unlock(&dev->dev_mut);
+                return -EFAULT;
+            }
             
+            if (!schedule_work(&module_dev_pp->dma_work))
+            {
+                mutex_unlock(&dev->dev_mut);
+                return -EFAULT;
+            }
+            
+            int read = 0; 
+            device_ioctrl_dma part;
+            memcpy(&part, &module_dev_pp->dma_workData, sizeof(device_ioctrl_dma));
+            
+            for (; read < module_dev_pp->dma_workData.dma_size; )
+            {
+                pciedev_block* block;
+                
+                part.dma_offset = module_dev_pp->dma_workData.dma_offset + read;
+                
+                retval = pciedev_wait_kring_dma(dev, &part, &block);
+                if (block)
+                {
+                    read += block->dma_size;
+                    pciedev_bufring_release_buffer(module_dev_pp, block);
+                } 
+                else
+                {
+                    retval = -EFAULT;
+                    break;
+                }
+            }
+            
+            break;
+        }  
+        
         case PCIEDEV_REQUEST_READ_DMA:
             mutex_unlock(&dev->dev_mut);
             
