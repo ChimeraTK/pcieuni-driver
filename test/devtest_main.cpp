@@ -25,27 +25,19 @@ enum TMainMenuOption
     MAIN_MENU_BOARD_RESET,
     
     MAIN_MENU_DMA_READ_SINGLE,
-    MAIN_MENU_KBUF_DMA_READ_SINGLE,
     MAIN_MENU_KRING_DMA_READ_SINGLE,
     
     MAIN_MENU_DMA_READ_CHUNK,
-    MAIN_MENU_KBUF_DMA_READ_CHUNK,
 
     MAIN_MENU_KRING_DMA_READ_512MB,
-    MAIN_MENU_MMAP_DMA_READ_512MB,
     
     MAIN_MENU_PERFORMANCE_TEST_READ_16MB,
-    MAIN_MENU_PERFORMANCE_TEST_KBUF_16MB,
     MAIN_MENU_PERFORMANCE_TEST_KRING_16MB,
-    MAIN_MENU_PERFORMANCE_TEST_ASYNC_16MB,
-    MAIN_MENU_PERFORMANCE_TEST_MMAP_16MB,
     MAIN_MENU_PERFORMANCE_TEST_ALL_16MB_10HZ,
 
     MAIN_MENU_PERFORMANCE_TEST_READ_16MB_10HZ,
-    MAIN_MENU_PERFORMANCE_TEST_KBUF_16MB_10HZ,
     MAIN_MENU_PERFORMANCE_TEST_KRING_16MB_10HZ,
     
-    MAIN_MENU_STRESS_TEST,
     MAIN_MENU_EXIT
 };
 
@@ -59,20 +51,13 @@ TMainMenuOption GetMainMenuChoice()
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_BOARD_RESET,                "Reset board"));
     
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_SINGLE,            "Single read operation: Simple DMA"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_KBUF_DMA_READ_SINGLE,       "Single read operation: Single kernel buffer DMA"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_KRING_DMA_READ_SINGLE,       "Single read operation: Kernel ring buffer DMA"));    
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_CHUNK,             "Read device memory chunk: Simple DMA"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_KBUF_DMA_READ_CHUNK,        "Read device memory chunk: Single kernel buffer DMA"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_KRING_DMA_READ_512MB,       "Read 512MB: Kernel ring buffer DMA"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_MMAP_DMA_READ_512MB,        "Read 512MB: MMAP DMA"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_READ_16MB, "16 MB perfomance test: Simple DMA"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_KBUF_16MB, "16 MB perfomance test: Single kernel buffer DMA"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_KRING_16MB,"16 MB perfomance test: Kernel ring buffer DMA"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_ASYNC_16MB,"16 MB perfomance test: Async kernel ring buffer DMA"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_MMAP_16MB, "16 MB perfomance test: MMAP DMA"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_ALL_16MB_10HZ,  "16 MB perfomance test: ALL"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_READ_16MB_10HZ, "16 MB read 10 times per second: Simple DMA"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_KBUF_16MB_10HZ, "16 MB read 10 times per second: Single kernel buffer DMA"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_PERFORMANCE_TEST_KRING_16MB_10HZ,"16 MB read 10 times per second: Kernel ring buffer DMA"));
     //    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_STRESS_TEST,                "Stress test"));
     
@@ -267,38 +252,6 @@ void TestDmaRead(IDevice* device, TTest* test)
     test->UpdateStatus(bytesRead, device->Error());
 }
 
-
-void TestKbufDmaRead(IDevice* device, TTest* test)
-{
-    int code = 0;
-    
-    long offset    = test->fStartOffset;
-    long bytes     = test->fBytesPerTest;
-    long bytesRead = 0;
-        
-    for (; bytes > 0 ; )
-    {
-        long bytesToRead = min<int>(bytes, test->fBlockBytes);
-        
-        static device_ioctrl_dma dma_rw;
-        dma_rw.dma_cmd     = 0;
-        dma_rw.dma_pattern = 0; 
-        dma_rw.dma_size    = bytesToRead;
-        dma_rw.dma_offset  = offset;
-        
-        code = device->KbufReadDma(dma_rw, &test->fBuffer[bytesRead]);
-        if (code != 0) 
-        {
-            break;
-        }
-        
-        bytesRead += bytesToRead;
-        bytes     -= bytesToRead;
-        offset    += bytesToRead; 
-    }
-    test->UpdateStatus(bytesRead, device->Error());
-}
-
 void TestKringDmaRead(IDevice* device, TTest* test)
 {
     int code = 0;
@@ -310,85 +263,6 @@ void TestKringDmaRead(IDevice* device, TTest* test)
     dma_rw.dma_offset  = test->fStartOffset;
     code = device->KringReadDma(dma_rw, &test->fBuffer[0]);
     test->UpdateStatus(code ? 0 : test->fBytesPerTest, device->Error());
-}
-
-void TestKringDmaReadNoCopy(IDevice* device, TTest* test)
-{
-    int code = 0;
-    
-    static device_ioctrl_dma dma_rw;
-    dma_rw.dma_cmd     = 0;
-    dma_rw.dma_pattern = 0; 
-    dma_rw.dma_size    = test->fBytesPerTest;
-    dma_rw.dma_offset  = test->fStartOffset;
-    code = device->KringReadDmaNoCopy(dma_rw, &test->fBuffer[0]);
-    test->UpdateStatus(code ? 0 : test->fBytesPerTest, device->Error());
-}
-
-void TestAsyncDmaRead(IDevice* device,  TTest* test)
-{
-    long bytesRead = 0;
-    if (!device->RequestReadDma(test->fStartOffset, test->fBytesPerTest, test->fBlockBytes))
-    {
-        bytesRead = device->WaitReadDma(&test->fBuffer[0], test->fStartOffset, test->fBytesPerTest, test->fBlockBytes);
-    }
-    test->UpdateStatus(bytesRead, device->Error());    
-}
-
-void TestMMapRead(IDevice* device, TTest* test)
-{
-    long bytesRead = 0;
-    if (!device->RequestReadDma(test->fStartOffset, test->fBytesPerTest, test->fBlockBytes)) 
-    {
-        bytesRead = device->CollectMMapRead(&test->fBuffer[0], test->fStartOffset, test->fBytesPerTest, test->fBlockBytes);
-    }
-    test->UpdateStatus(bytesRead, device->Error());    
-}
-
-void StressTest(IDevice* device)
-{
-//     TTest testLog;
-//     
-//     for (int i= 0; i < 100; i++)
-//     {
-//         testLog.Init("KBUF_READ", &TestDmaRead, 0,  512*1024*1024, 1, 1*1024*1024);
-//         testLog.PrintHead(cout);
-//         TestDmaRead(device, &testLog);
-//         if (!testLog.StatusOK()) { testLog.PrintResult(cout); return; }
-//         
-//         testLog.Init("KBUF_READ", 0, 512*1024*1024, 1, 1024*1024);
-//         testLog.PrintHead(cout);
-//         TestKbufDmaRead(device, &testLog);
-//         if (!testLog.StatusOK()) { testLog.PrintResult(cout); return; }
-//         
-//         testLog.Init("KBUF_READ", 0, 512*1024*1024, 1, 4*1024*1024);
-//         testLog.PrintHead(cout);
-//         TestKbufDmaRead(device, &testLog);
-//         if (!testLog.StatusOK()) { testLog.PrintResult(cout); return; }
-//         
-//         testLog.Init("ASYNC_KBUF_READ", 0, 512*1024*1024, 1, 1024*1024);
-//         testLog.PrintHead(cout);
-//         TestAsyncDmaRead(device, &testLog);
-//         if (!testLog.StatusOK()) { testLog.PrintResult(cout); return; }
-//         
-//         testLog.Init("ASYNC_KBUF_READ", 0, 512*1024*1024, 1, 4*1024*1024);
-//         testLog.PrintHead(cout);
-//         TestAsyncDmaRead(device, &testLog);
-//         if (!testLog.StatusOK()) { testLog.PrintResult(cout); return; }
-//         
-//         testLog.Init("MMAP_READ", 0, 512*1024*1024, 1, 1*1024*1024);
-//         testLog.PrintHead(cout);
-//         TestMMapRead(device, &testLog);
-//         if (!testLog.StatusOK()) { testLog.PrintResult(cout); return; }
-//         
-//         testLog.Init("MMAP_READ", 0, 512*1024*1024, 1, 4*1024*1024);
-//         testLog.PrintHead(cout);
-//         TestMMapRead(device, &testLog);
-//         if (!testLog.StatusOK()) { testLog.PrintResult(cout); return; }
-//     }    
-//     cout << "**********************************************"  << endl;
-//     cout << "*** RESULT: OK!" << endl;
-//     cout << "**********************************************"  << endl;    
 }
 
 void WriteByteReg(IDevice* device, int bar, long offset, unsigned int data)
@@ -556,57 +430,8 @@ int main(int argc, char *argv[])
                 unsigned int word_daq_enable     = 0x08; // bar 1
                 
                 cout << "******** Setup device registers ************"  << endl;
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x45, 0x00);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x0A, 0x43);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x3C, 0x0C);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x3D, 0x0C);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x3E, 0x0C);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x3F, 0x0C);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x40, 0x02);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x41, 0x02);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x42, 0x02);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x43, 0x02);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x49, 0x80);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x4B, 0x80);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x4D, 0x80);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x4F, 0x80);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x51, 0x80);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x53, 0x80);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x55, 0x80);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x57, 0x80);
-//                 WriteByteReg(device.get(), 0, area_spi_div + 0x5A, 0x81);
-//                 
-//                 WriteWordReg(device.get(), 0, word_clk_mux + 0x00, 0);
-//                 WriteWordReg(device.get(), 0, word_clk_mux + 0x01, 0);
-//                 WriteWordReg(device.get(), 0, word_clk_mux + 0x02, 3);
-//                 WriteWordReg(device.get(), 0, word_clk_mux + 0x03, 3);
-//                 
-//                 WriteWordReg(device.get(), 0, word_clk_sel + 0x00, 1);
                 
                 WriteWordReg(device.get(), 0, word_reset_n + 0x00, 1);
-                
-//                 WriteByteReg(device.get(), 0, area_spi_adc + 0x00, 0x3C);
-//                 WriteByteReg(device.get(), 0, area_spi_adc + 0x14, 0x41);
-//                 WriteByteReg(device.get(), 0, area_spi_adc + 0x0D, 0x00);
-//                 WriteByteReg(device.get(), 0, area_spi_adc + 0xFF, 0x01);
-//                 
-//                 WriteWordReg(device.get(), 0, word_adc_ena + 0x00, 1);
-//                 
-//                 WriteWordReg(device.get(), 1, word_timing_freq + 0x00, 81250000);
-//                 WriteWordReg(device.get(), 1, word_timing_freq + 0x01, 0);
-//                 WriteWordReg(device.get(), 1, word_timing_freq + 0x02, 0);
-//                 WriteWordReg(device.get(), 1, word_timing_freq + 0x03, 0);
-//                 WriteWordReg(device.get(), 1, word_timing_freq + 0x04, 8);
-//                 WriteWordReg(device.get(), 1, word_timing_freq + 0x05, 8);
-//                 WriteWordReg(device.get(), 1, word_timing_freq + 0x06, 8);
-//                 WriteWordReg(device.get(), 1, word_timing_freq + 0x07, 0);
-//                 
-//                 WriteWordReg(device.get(), 1, word_timing_trg_sel + 0x00, 0);
-//                 
-//                 WriteWordReg(device.get(), 1, word_timing_int_ena + 0x00, 0xF1);
-//                 
-//                 WriteWordReg(device.get(), 1, word_daq_enable + 0x00, 0x02);
-                
                 
                 continue;
                 break;
@@ -651,17 +476,6 @@ int main(int argc, char *argv[])
                 
                 break;
             }
-            
-            case MAIN_MENU_KBUF_DMA_READ_SINGLE:
-            {
-                long offset = GetOffsetChoice();
-                long bytes  = GetTotalBytesChoice();
-                
-                testLog.Init("Kernel buffer read", &TestKbufDmaRead, offset, bytes, 1, 0);
-                testLog.Run(device.get());
-                
-                break;
-            }
 
             case MAIN_MENU_KRING_DMA_READ_SINGLE:
             {
@@ -685,38 +499,8 @@ int main(int argc, char *argv[])
                 break;
             }
 
-            case MAIN_MENU_KBUF_DMA_READ_CHUNK:
-            {
-                long offset = GetOffsetChoice();
-                long bytes  = GetTotalBytesChoice();
-                long block  = GetBlockBytesChoice();
-                
-                testLog.Init("Kernel buffer read", &TestKbufDmaRead, offset, bytes, 1, 0);
-                testLog.Run(device.get());
-                
-                break;
-            }
-
-            case MAIN_MENU_KRING_DMA_READ_512MB:
-                testLog.Init("Kernel ring buffer read", &TestAsyncDmaRead, 0, 512*1024*1024, 1, 0);
-                testLog.Run(device.get());
-                
-                break;
-            
-            case MAIN_MENU_MMAP_DMA_READ_512MB:
-                testLog.Init("MMAP read", &TestMMapRead, 0, 512*1024*1024, 1, 0);
-                testLog.Run(device.get(), true);
-                
-                break;
-
             case MAIN_MENU_PERFORMANCE_TEST_READ_16MB:
                 testLog.Init("Simple DMA read", &TestDmaRead, 0, 16*1024*1024, 200, 0);
-                testLog.Run(device.get());
-                
-                break;
-            
-            case MAIN_MENU_PERFORMANCE_TEST_KBUF_16MB:
-                testLog.Init("Kernel buffer read", &TestKbufDmaRead, 0, 16*1024*1024, 200, 0);
                 testLog.Run(device.get());
                 
                 break;
@@ -726,26 +510,9 @@ int main(int argc, char *argv[])
                 testLog.Run(device.get());
                 
                 break;
-                
-            case MAIN_MENU_PERFORMANCE_TEST_ASYNC_16MB:
-                testLog.Init("Kernel ring buffer read", &TestAsyncDmaRead, 0, 16*1024*1024, 200, 0);
-                testLog.Run(device.get());
-                
-                break;
-            
-            case MAIN_MENU_PERFORMANCE_TEST_MMAP_16MB:
-                testLog.Init("MMAP read", &TestMMapRead, 0, 16*1024*1024, 200, 0);
-                testLog.Run(device.get(), true);
-                
-                break;
 
             case MAIN_MENU_PERFORMANCE_TEST_READ_16MB_10HZ:
                 testLog.Init("Simple DMA read", &TestDmaRead, 0, 16*1024*1024, 200, 100000);
-                testLog.Run(device.get());
-                break;
-                
-            case MAIN_MENU_PERFORMANCE_TEST_KBUF_16MB_10HZ:
-                testLog.Init("Simple DMA read", &TestKbufDmaRead, 0, 16*1024*1024, 200, 100000);
                 testLog.Run(device.get());
                 break;
                 
@@ -769,30 +536,15 @@ int main(int argc, char *argv[])
                      << endl;
 
                 testLog.Init("Simple DMA read                  ", &TestDmaRead, 0, 16*1024*1024, nRuns, 100000);
-                testLog.Run(device.get(), false, true);
+                testLog.Run(device.get(), true);
                 testLog.PrintStat(cout);
-                testLog.Init("DMA read using single buffer     ", &TestKbufDmaRead, 0, 16*1024*1024, nRuns, 100000);
-                testLog.Run(device.get(), false, true);
-                testLog.PrintStat(cout);
-                testLog.Init("Async DMA read using ring buffer ", &TestAsyncDmaRead, 0, 16*1024*1024, nRuns, 100000);
-                testLog.Run(device.get(), false, true);
-                testLog.PrintStat(cout);
+                
                 testLog.Init("DMA read using ring buffer      ", &TestKringDmaRead, 0, 16*1024*1024, nRuns, 100000);
-                testLog.Run(device.get(), false, true);
+                testLog.Run(device.get(), true);
                 testLog.PrintStat(cout);
-                testLog.Init("DMA read simulated MMAP          ", &TestKringDmaReadNoCopy, 0, 16*1024*1024, nRuns, 100000);
-                testLog.Run(device.get(), false, true);
-                testLog.PrintStat(cout);
-//                 testLog.Init("Async DMA using MMAP buffer-ring ", &TestMMapRead, 0, 16*1024*1024, nRuns, 100000);
-//                 testLog.Run(device.get(), true, true);
-//                 testLog.PrintStat(cout);
                 
                 continue;
             }
-            case MAIN_MENU_STRESS_TEST:
-//                StressTest(device.get());
-                break;
-            
             default:
                 cout << "ERROR! You have selected an invalid choice.";
                 break;

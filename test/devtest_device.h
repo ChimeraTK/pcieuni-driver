@@ -19,14 +19,7 @@ public:
     virtual int RegWrite(int bar, long offset, unsigned int data, long dataSize) = 0; 
     virtual int RegRead(int bar, long offset, unsigned char* data, long dataSize) = 0; 
     virtual int ReadDma(device_ioctrl_dma& dma_rw, char* buffer) = 0;
-    virtual int KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) = 0;
     virtual int KringReadDma(device_ioctrl_dma& dma_rw, char* buffer) = 0;
-    virtual int KringReadDmaNoCopy(device_ioctrl_dma& dma_rw, char* buffer) = 0;
-    virtual int RequestReadDma(int offset, int bytes, int bytesPerCall) = 0;
-    virtual int WaitReadDma(char* buffer, int offset, int bytes, int bytesPerCall)= 0;
-    virtual void InitMMap(unsigned long bufsize) = 0;
-    virtual void ReleaseMMap() = 0; 
-    virtual int CollectMMapRead(char* buffer, int offset, int bytes, int bytesPerCall) = 0;
     
     virtual ~IDevice() {};
 };
@@ -131,20 +124,9 @@ public:
     virtual int RegWrite(int bar, long offset, unsigned int data, long dataSize); 
     virtual int RegRead(int bar, long offset, unsigned char* data, long dataSize); 
     virtual int ReadDma(device_ioctrl_dma& dma_rw, char* buffer);
-    virtual int KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer);
     virtual int KringReadDma(device_ioctrl_dma& dma_rw, char* buffer);
-    virtual int KringReadDmaNoCopy(device_ioctrl_dma& dma_rw, char* buffer);
-    virtual int RequestReadDma(int offset, int bytes, int bytesPerCall);
     virtual int Ioctl(long unsigned int req, device_ioctrl_dma* dma_rw, char* tgtBuffer = NULL);
-    virtual int WaitReadDma(char* buffer, int offset, int bytes, int bytesPerCall);
-    virtual void InitMMap(unsigned long bufsize);
-    virtual void ReleaseMMap(); 
-    virtual int CollectMMapRead(char* buffer, int offset, int bytes, int bytesPerCall);
-    
 private:
-    static void* DoRequestReadDma(void* readReq);
-    char*  GetMMapBuffer(unsigned long offset);
-    
     
     string    fFile;      /**< Name of the device file node in /dev.  */
     int       fHandle;    /**< Device file descriptor.                */
