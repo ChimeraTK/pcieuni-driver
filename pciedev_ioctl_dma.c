@@ -13,12 +13,11 @@
 #include "pciedev_io.h"
 #include "pciedev_ufn.h"
 
-void pciedev_unpack_dma_desc(void* reg_address, device_ioctrl_dma* data, dma_desc* dma)
+void pciedev_unpack_dma_desc(void* reg_address, device_ioctrl_dma* data, dma_req* dma)
 {
     dma->reg_address = reg_address;
-    dma->size        = data->dma_size;
     dma->offset      = data->dma_offset;
-    dma->trans_size  = PCIEDEV_DMA_SYZE * DIV_ROUND_UP(data->dma_size, PCIEDEV_DMA_SYZE);
+    dma->size        = PCIEDEV_DMA_SYZE * DIV_ROUND_UP(data->dma_size, PCIEDEV_DMA_SYZE);
 }
 
 pciedev_block* pciedev_bufring_get_writable(module_dev* dev, u_int dma_offset, u_int dma_size)
@@ -169,26 +168,27 @@ void pciedev_dma_req_handler(struct work_struct *work)
 {
     module_dev* mdev = container_of(work, struct module_dev, dma_work);
     
-    dma_desc dma;
-    pciedev_unpack_dma_desc(mdev->parent_dev->memmory_base2, &mdev->dma_workData, &dma);
-    if(dma.size <= 0) 
+    if(mdev->dma_workData.size <= 0) 
     {
         // TODO: handle error
         return;
     }
     
-    for (; dma.size > 0; )
+    u_int offset = mdev->dma_workData.offset;
+    u_int toRead = mdev->dma_workData.size;
+    
+    for (; mdev->dma_workData.size > 0; )
     {
         pciedev_block* block;
         
-        block = pciedev_bufring_get_writable(mdev, dma.offset, dma.trans_size);
+        block = pciedev_bufring_get_writable(mdev, offset, toRead);
         if(!block) 
         {
             // TODO: handle error
             return;
         }
-        dma.offset += block->dma_size;
-        dma.size   -= block->dma_size;
+        offset += block->dma_size;
+        toRead -= block->dma_size;
         
         if (pciedev_dma_reserve(mdev)) 
         {
@@ -196,7 +196,7 @@ void pciedev_dma_req_handler(struct work_struct *work)
             return;
         }
         
-        pciedev_start_dma_read(mdev, dma.reg_address, block);
+        pciedev_start_dma_read(mdev, mdev->dma_workData.reg_address, block);
         pciedev_dma_release(mdev);
     }
 }
@@ -568,10 +568,12 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
         case PCIEDEV_KRING_READ_DMA:
         {
             // Copy DMA transfer arguments into workqeue-data structure 
-            if (copy_from_user(&module_dev_pp->dma_workData, (void*)arg, io_dma_size)) {
+            if (copy_from_user(&dma_data, (void*)arg, io_dma_size)) {
                 mutex_unlock(&dev->dev_mut);
                 return -EFAULT;
             }
+            
+            pciedev_unpack_dma_desc(dev->memmory_base2, &module_dev_pp->dma_workData, &dma_data);
             
             // Push DMA transfer task to workqueue
             if (!schedule_work(&module_dev_pp->dma_work))
@@ -580,24 +582,21 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
                 return -EFAULT;
             }
          
-            int read = 0; 
-            u_int offset = module_dev_pp->dma_workData.dma_offset;
-            
-            for (; read < module_dev_pp->dma_workData.dma_size; )
+            u_int dataRead = 0;
+
+            for (; dataRead < dma_data.dma_size; )
             {
                 pciedev_block* block;
                 
-                offset = module_dev_pp->dma_workData.dma_offset + read;
-                
-                retval = pciedev_wait_kring_dma(dev, offset, &block);
+                retval = pciedev_wait_kring_dma(dev, module_dev_pp->dma_workData.offset + dataRead, &block);
                 if (block)
                 {
-                    if (copy_to_user((void *)arg + read, block->kaddr, block->dma_size))
+                    if (copy_to_user((void *)arg + dataRead, block->kaddr, min(block->dma_size, dma_data.dma_size - dataRead)))
                     {
                         retval = -EFAULT;
                         break;
                     }
-                    read += block->dma_size;
+                    dataRead += block->dma_size;
                     pciedev_bufring_release_buffer(module_dev_pp, block);
                 } 
                 else
