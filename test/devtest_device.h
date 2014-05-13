@@ -18,83 +18,10 @@ public:
     virtual device_ioctrl_kbuf_info KbufInfo() = 0;
     virtual int RegWrite(int bar, long offset, unsigned int data, long dataSize) = 0; 
     virtual int RegRead(int bar, long offset, unsigned char* data, long dataSize) = 0; 
-    virtual int ReadDma(device_ioctrl_dma& dma_rw, char* buffer) = 0;
     virtual int KringReadDma(device_ioctrl_dma& dma_rw, char* buffer) = 0;
     
     virtual ~IDevice() {};
 };
-
-class TDeviceMock : public IDevice
-{
-public:
-    virtual bool StatusOk() const { return true; }
-    virtual const string Error() const { return ""; }
-    virtual void ResetStatus() {};
-    
-    virtual device_ioctrl_kbuf_info KbufInfo()
-    {
-        device_ioctrl_kbuf_info info;
-        info.block_size = 4*1024*1024;
-        info.num_blocks = 2;
-        return info;
-    }
-    
-    virtual int RegWrite(int bar, long offset, unsigned int data, long dataSize)
-    {
-        return 0;
-    }
-    
-    virtual int RegRead(int bar, long offset, unsigned char* data, long dataSize)
-    {
-        return 0;
-    }    
-    
-    virtual int ReadDma(device_ioctrl_dma& dma_rw, char* buffer) 
-    { 
-        usleep(10);
-        return 0; 
-    }
-
-    virtual int KbufReadDma(device_ioctrl_dma& dma_rw, char* buffer) 
-    { 
-        usleep(10);
-        return 0; 
-    }
-
-    virtual int KringReadDma(device_ioctrl_dma& dma_rw, char* buffer) 
-    { 
-        usleep(10);
-        return 0; 
-    }
-    
-    virtual int KringReadDmaNoCopy(device_ioctrl_dma& dma_rw, char* buffer) 
-    { 
-        usleep(10);
-        return 0; 
-    }
-    
-    virtual int RequestReadDma(int offset, int bytes, int bytesPerCall)
-    {
-        return 0;
-    }
-    
-    virtual int WaitReadDma(char* buffer, int offset, int bytes, int bytesPerCall)
-    {
-        usleep(1000);
-        return bytes; 
-    }
-    
-    virtual void InitMMap(unsigned long bufsize) {}
-    
-    virtual void ReleaseMMap() {}
-    
-    virtual int CollectMMapRead(char* buffer, int offset, int bytes, int bytesPerCall) 
-    {
-        usleep(1000);
-        return bytes; 
-    }
-};
-
 
 class TDevice : public IDevice
 {
@@ -123,7 +50,6 @@ public:
     virtual device_ioctrl_kbuf_info KbufInfo();
     virtual int RegWrite(int bar, long offset, unsigned int data, long dataSize); 
     virtual int RegRead(int bar, long offset, unsigned char* data, long dataSize); 
-    virtual int ReadDma(device_ioctrl_dma& dma_rw, char* buffer);
     virtual int KringReadDma(device_ioctrl_dma& dma_rw, char* buffer);
     virtual int Ioctl(long unsigned int req, device_ioctrl_dma* dma_rw, char* tgtBuffer = NULL);
 private:

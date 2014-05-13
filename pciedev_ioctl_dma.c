@@ -1,31 +1,25 @@
 #include <linux/types.h>
 #include <linux/timer.h>
-#include <asm/uaccess.h>
 #include <linux/sched.h>
 #include <linux/dma-mapping.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/wait.h>
 
 #include "pciedev_dma.h"
 #include "pciedev_fnc.h"
 #include "pciedev_io.h"
 #include "pciedev_ufn.h"
 
-void pciedev_unpack_dma_desc(void* reg_address, device_ioctrl_dma* data, dma_req* dma)
-{
-    dma->reg_address = reg_address;
-    dma->offset      = data->dma_offset;
-    dma->size        = PCIEDEV_DMA_SYZE * DIV_ROUND_UP(data->dma_size, PCIEDEV_DMA_SYZE);
-}
 
 pciedev_block* pciedev_bufring_get_writable(module_dev* dev, u_int dma_offset, u_int dma_size)
 {
     pciedev_block* dma_buffer = 0;
     ulong timeout = HZ/1;
 
-    PDEBUG("pciedev_bufring_get_writable(dma_offset=0x%lx, dma_size=ox%lx)", dma_offset, dma_size);
+    PDEBUG("pciedev_bufring_get_writable(dma_offset=0x%lx, dma_size=0x%lx)", dma_offset, dma_size);
     
     PDEBUG("SPIN-LOCK\n");
     spin_lock(&dev->dma_bufferList_lock);
@@ -52,12 +46,12 @@ pciedev_block* pciedev_bufring_get_writable(module_dev* dev, u_int dma_offset, u
             int code = wait_event_interruptible_timeout(dev->buffer_waitQueue, (dma_buffer->dma_free || (dev->dma_buffer == dma_buffer)) , timeout);
             if (code == 0)
             {
-                printk(KERN_ALERT "PCIEDEV: Failed to get free memory buffer (TIMEOUT)\n");
+                printk(KERN_ALERT "PCIEDEV: Failed to get free memory buffer (dma_offset=0x%lx, dma_size=ox%lx) - TIMEOUT!\n", dma_offset, dma_size);
                 return 0;
             }
             else if (code < 0 )
             {
-                printk(KERN_ALERT "PCIEDEV: Failed to get free memory buffer (errno=%d)\n", code);
+                printk(KERN_ALERT "PCIEDEV: Failed to get free memory buffer (dma_offset=0x%lx, dma_size=ox%lx) - errno=%d\n", dma_offset, dma_size, code);
                 return 0;
             }
             
@@ -177,7 +171,7 @@ void pciedev_dma_req_handler(struct work_struct *work)
     u_int offset = mdev->dma_workData.offset;
     u_int toRead = mdev->dma_workData.size;
     
-    for (; mdev->dma_workData.size > 0; )
+    for (; toRead > 0; )
     {
         pciedev_block* block;
         
@@ -361,6 +355,81 @@ int pciedev_wait_kring_dma(pciedev_dev *dev, u_int offset, pciedev_block** pbloc
     return 0;
 }
         
+        
+ 
+
+/**
+ * @brief Puts DMA request on the workqueue.
+ * 
+ * After DMA request is on workqueue kernel will automatically execute it in another thread.
+ * 
+ * @param dev      Target device 
+ * @param dma_req  DMA request
+ * 
+ * @retval 0        Success
+ * @retval -EBUSY   DMA request is already on the workqueue 
+ */
+int pciedev_request_dma(pciedev_dev* dev, device_ioctrl_dma* ioctrl_dma)
+{
+    struct module_dev* module_dev = (struct module_dev*)(dev->dev_str);
+    
+    // Prepare DMA request to be processed by workqueue
+    module_dev->dma_workData.reg_address = dev->memmory_base2;
+    module_dev->dma_workData.offset      = ioctrl_dma->dma_offset;
+    module_dev->dma_workData.size        = PCIEDEV_DMA_SYZE * DIV_ROUND_UP(ioctrl_dma->dma_size, PCIEDEV_DMA_SYZE);
+    
+    // Add DMA request work to workqueue
+    if (!schedule_work(&module_dev->dma_work))
+    {
+        // work was already on queue?!
+        return -EBUSY;
+    }
+    
+    return 0;
+}
+
+
+/**
+ * @brief Collects DMA transfer results and copies data to userspace.
+ * 
+ * @param dev        Target device 
+ * @param ioctrl_dma DMA request
+ * @param us_buffer  Target userspace buffer
+ * 
+ * @return int
+ */
+//TODO return values
+int pciedev_collect_dma(pciedev_dev* dev, device_ioctrl_dma* ioctrl_dma, void* us_buffer)
+{
+    int retval = 0;
+    struct module_dev* module_dev = (struct module_dev*)(dev->dev_str);
+    u_int dataRead = 0;
+    
+    for (; dataRead < ioctrl_dma->dma_size; )
+    {
+        pciedev_block* block;
+        
+        retval = pciedev_wait_kring_dma(dev, ioctrl_dma->dma_offset + dataRead, &block);
+        if (block)
+        {
+            if (copy_to_user(us_buffer + dataRead, (void*) block->kaddr, min(block->dma_size, ioctrl_dma->dma_size - dataRead)))
+            {
+                retval = -EFAULT;
+                break;
+            }
+            dataRead += block->dma_size;
+            pciedev_bufring_release_buffer(module_dev, block);
+        } 
+        else
+        {
+            retval = -EFAULT;
+            break;
+        }
+    }
+    return retval;
+}
+
+
 long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *arg_p, pciedev_cdev * pciedev_cdev_m)
 {
     unsigned int    cmd;
@@ -573,39 +642,11 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
                 return -EFAULT;
             }
             
-            pciedev_unpack_dma_desc(dev->memmory_base2, &module_dev_pp->dma_workData, &dma_data);
+            retval = pciedev_request_dma(dev, &dma_data);
+            if (retval < 0) break;
             
-            // Push DMA transfer task to workqueue
-            if (!schedule_work(&module_dev_pp->dma_work))
-            {
-                mutex_unlock(&dev->dev_mut);
-                return -EFAULT;
-            }
-         
-            u_int dataRead = 0;
+            retval = pciedev_collect_dma(dev, &dma_data, (void*)arg);
 
-            for (; dataRead < dma_data.dma_size; )
-            {
-                pciedev_block* block;
-                
-                retval = pciedev_wait_kring_dma(dev, module_dev_pp->dma_workData.offset + dataRead, &block);
-                if (block)
-                {
-                    if (copy_to_user((void *)arg + dataRead, block->kaddr, min(block->dma_size, dma_data.dma_size - dataRead)))
-                    {
-                        retval = -EFAULT;
-                        break;
-                    }
-                    dataRead += block->dma_size;
-                    pciedev_bufring_release_buffer(module_dev_pp, block);
-                } 
-                else
-                {
-                    retval = -EFAULT;
-                    break;
-                }
-            }
-            
             break;
         }   
         default:

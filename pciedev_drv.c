@@ -15,7 +15,7 @@ MODULE_DESCRIPTION("DESY AMC-PCIE board driver");
 MODULE_VERSION("2.0.0");
 MODULE_LICENSE("Dual BSD/GPL");
 
-static unsigned long  kbuf_blk_sz_kb = 4096;
+static unsigned long  kbuf_blk_sz_kb = 256;
 static unsigned short kbuf_blk_num   = 2;
 
 module_param(kbuf_blk_sz_kb, ulong, S_IRUGO);

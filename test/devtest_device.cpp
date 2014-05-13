@@ -68,15 +68,15 @@ int TDevice::RegWrite(int bar, long offset, unsigned int data, long dataSize)
     rw.offset_rw = offset;
     rw.data_rw   = 0;
     rw.data_rw   = data;
-    if (dataSize = 1)
+    if (dataSize == 1)
     {    
         rw.mode_rw   = RW_D8;
     }
-    else if (dataSize = 2)
+    else if (dataSize == 2)
     {    
         rw.mode_rw   = RW_D16;
     }
-    else if (dataSize = 4)
+    else if (dataSize == 4)
     {    
         rw.mode_rw   = RW_D32;
     }    
@@ -123,11 +123,6 @@ int TDevice::RegRead(int bar, long offset, unsigned char* data, long dataSize)
     }
     memcpy(data, &(rw.data_rw), 4);
     return 0;
-}
-
-int TDevice::ReadDma(device_ioctrl_dma& dma_rw, char* buffer)
-{
-    return this->Ioctl(PCIEDEV_READ_DMA, &dma_rw, buffer);
 }
 
 int TDevice::KringReadDma(device_ioctrl_dma& dma_rw, char* buffer)
