@@ -111,9 +111,6 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
         
         pciedev_set_drvdata(pciedev_cdev_m->pciedev_dev_m[tmp_brd_num], module_dev_p[tmp_brd_num]);
         pciedev_setup_interrupt(pciedev_interrupt, pciedev_cdev_m->pciedev_dev_m[tmp_brd_num], DEVNAME); 
-        
-        // TODO: move this into upciedev
-        INIT_WORK(&module_dev_p[tmp_brd_num]->dma_work, pciedev_dma_req_handler);
     }
     return result;
 }

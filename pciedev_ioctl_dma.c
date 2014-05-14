@@ -13,7 +13,6 @@
 #include "pciedev_io.h"
 #include "pciedev_ufn.h"
 
-
 pciedev_block* pciedev_bufring_get_writable(module_dev* dev, u_int dma_offset, u_int dma_size)
 {
     pciedev_block* dma_buffer = 0;
@@ -157,97 +156,6 @@ void pciedev_start_dma_read(module_dev* mdev, void* bar, pciedev_block* block)
     //iowrite32(0,                       (void*)(dma->reg_address + DMA_SIZE_ADDRESS ));
 }
 
-
-void pciedev_dma_req_handler(struct work_struct *work)
-{
-    module_dev* mdev = container_of(work, struct module_dev, dma_work);
-    
-    if(mdev->dma_workData.size <= 0) 
-    {
-        // TODO: handle error
-        return;
-    }
-    
-    u_int offset = mdev->dma_workData.offset;
-    u_int toRead = mdev->dma_workData.size;
-    
-    for (; toRead > 0; )
-    {
-        pciedev_block* block;
-        
-        block = pciedev_bufring_get_writable(mdev, offset, toRead);
-        if(!block) 
-        {
-            // TODO: handle error
-            return;
-        }
-        offset += block->dma_size;
-        toRead -= block->dma_size;
-        
-        if (pciedev_dma_reserve(mdev)) 
-        {
-            // TODO: handle error
-            return;
-        }
-        
-        pciedev_start_dma_read(mdev, mdev->dma_workData.reg_address, block);
-        pciedev_dma_release(mdev);
-    }
-}
-
-// Find active DMA buffer with given offset
-pciedev_block* pciedev_bufring_find_buffer(module_dev* dev, u_int dma_offset)
-{
-    pciedev_block* block;
-    struct list_head *ptr;    
-
-    PDEBUG("SPIN-LOCK\n");
-    spin_lock(&dev->dma_bufferList_lock);
-    list_for_each(ptr, &dev->dma_bufferList) 
-    {
-        block = list_entry(ptr, struct pciedev_block, list);
-        if ((block->dma_offset == dma_offset) && !block->dma_free)
-        {
-            spin_unlock(&dev->dma_bufferList_lock);
-            PDEBUG("SPIN-UNLOCKED\n");
-            
-            return block;
-        }
-    }
-    spin_unlock(&dev->dma_bufferList_lock);
-    PDEBUG("SPIN-UNLOCKED\n");
-    return 0;
-}
-
-pciedev_block* pciedev_bufring_find_driver_buffer(module_dev* dev, unsigned long offset)
-{
-    pciedev_block* block;
-    struct list_head *ptr;    
-    
-    PDEBUG("SPIN-LOCK\n");
-    spin_lock(&dev->dma_bufferList_lock);
-    
-    list_for_each(ptr, &dev->dma_bufferList) 
-    {
-        block = list_entry(ptr, struct pciedev_block, list);
-        if (block->offset == offset)
-        {
-            spin_unlock(&dev->dma_bufferList_lock);
-            PDEBUG("SPIN-UNLOCKED\n");
-            PDEBUG("pciedev_bufring_find_driver_buffer(offset=0x%lx): Found!\n", offset); 
-            
-            return block;
-        }
-    }
-    spin_unlock(&dev->dma_bufferList_lock);
-    PDEBUG("SPIN-UNLOCKED\n");
-    
-    
-    printk(KERN_ALERT "PCIEDEV: Requested DMA buffer not found (offset=0x%lx)!\n", offset); 
-    return 0;
-}
-
-
 // TODO: What if relese comes before read done!
 void pciedev_bufring_release_buffer(module_dev* dev, pciedev_block* block)
 {
@@ -297,140 +205,75 @@ int pciedev_wait_dma_read(module_dev* dev, pciedev_block* block)
     do_gettimeofday(&(dev->dma_stop_time));
     return 0;
 }
-
-int pciedev_wait_kring_dma(pciedev_dev *dev, u_int offset, pciedev_block** pblock)
+        
+pciedev_block *pciedev_start_dma(pciedev_dev* dev, u_int dmaOffset, u_int size)
 {
-    module_dev*       mdev;
-    ulong  timeout = HZ/1;
+    struct module_dev *mdev = (struct module_dev*)(dev->dev_str);
+    pciedev_block *targetBlock = 0;
     
-    PDEBUG("pciedev_wait_kring_dma(dma_offset=0x%lx)\n", offset);
-    
-    *pblock = 0;
-    
-    mdev = (module_dev*)pciedev_get_drvdata(dev);
-    if(!mdev) {
-        return -EFAULT;
-    }    
-
-
-    while (!(*pblock))
+    targetBlock = pciedev_bufring_get_writable(mdev, dmaOffset, size);
+    if(!targetBlock) 
     {
-        int code = wait_event_interruptible_timeout(mdev->buffer_waitQueue, 0 != pciedev_bufring_find_buffer(mdev, offset), timeout);
-        if (code <= 0)
-        {
-            printk(KERN_ALERT "PCIEDEV: Requested DMA buffer not found (dma_offset=0x%lx): TIMEOUT!\n", offset);
-            return -EFAULT;
-        }
-        else if (code < 0 )
-        {
-            printk(KERN_ALERT "PCIEDEV: Requested DMA buffer not found (dma_offset=0x%lx): errno=%d!\n", offset, code);
-            return -EFAULT;;
-        }
-        
-        *pblock = pciedev_bufring_find_buffer(mdev, offset);
+        // TODO: handle error properly
+        return ERR_PTR(-ENOMEM);
     }
-    if (!(*pblock))
+    if (pciedev_dma_reserve(mdev)) 
     {
-        return -EFAULT;
+        // TODO: handle error properly
+        return ERR_PTR(-EBUSY);
     }
-
-    PDEBUG("pciedev_wait_kring_dma(dma_offset=0x%lx): Target block found (drv_offset=0x%lx, size=0x%lx)\n", 
-           offset, (*pblock)->offset, (*pblock)->size); 
+    pciedev_start_dma_read(mdev, dev->memmory_base2, targetBlock);
+    pciedev_dma_release(mdev);
     
-    //print_hex_dump_bytes("Buffer contents after DMA: ", DUMP_PREFIX_NONE, (*pblock)->kaddr, 64);
-    
-    if (pciedev_wait_dma_read(mdev, *pblock))
-    {
-        // TODO: report proper error
-        return -EFAULT;
-    }
-        //     // TODO: handle missing interrupt
-    //     if (!module_dev_pp->waitFlag)
-    //     {
-        //         printk (KERN_ALERT "SIS8300_READ_DMA:SLOT NUM %i NO INTERRUPT \n", dev->slot_num);
-        //         module_dev_pp->waitFlag = 1;
-        //         return -EFAULT;
-        //     }
-    
-    return 0;
-}
-        
-        
- 
-
-/**
- * @brief Puts DMA request on the workqueue.
- * 
- * After DMA request is on workqueue kernel will automatically execute it in another thread.
- * 
- * @param dev      Target device 
- * @param dma_req  DMA request
- * 
- * @retval 0        Success
- * @retval -EBUSY   DMA request is already on the workqueue 
- */
-int pciedev_request_dma(pciedev_dev* dev, device_ioctrl_dma* ioctrl_dma)
-{
-    struct module_dev* module_dev = (struct module_dev*)(dev->dev_str);
-    
-    // Prepare DMA request to be processed by workqueue
-    module_dev->dma_workData.reg_address = dev->memmory_base2;
-    module_dev->dma_workData.offset      = ioctrl_dma->dma_offset;
-    module_dev->dma_workData.size        = PCIEDEV_DMA_SYZE * DIV_ROUND_UP(ioctrl_dma->dma_size, PCIEDEV_DMA_SYZE);
-    
-    // Add DMA request work to workqueue
-    if (!schedule_work(&module_dev->dma_work))
-    {
-        // work was already on queue?!
-        return -EBUSY;
-    }
-    
-    return 0;
+    return targetBlock;
 }
 
-
-/**
- * @brief Collects DMA transfer results and copies data to userspace.
- * 
- * @param dev        Target device 
- * @param ioctrl_dma DMA request
- * @param us_buffer  Target userspace buffer
- * 
- * @return int
- */
-//TODO return values
-int pciedev_collect_dma(pciedev_dev* dev, device_ioctrl_dma* ioctrl_dma, void* us_buffer)
+int pciedev_dma_read(pciedev_dev* dev, u_int devOffset, u_int dataSize, void* userBuffer)
 {
-    int retval = 0;
-    struct module_dev* module_dev = (struct module_dev*)(dev->dev_str);
-    u_int dataRead = 0;
+    int retVal = 0;
+    u_int dmaSize   = PCIEDEV_DMA_SYZE * DIV_ROUND_UP(dataSize, PCIEDEV_DMA_SYZE);
+    u_int dataReq   = 0;
+    u_int dataRead  = 0;
+    pciedev_block* prevBlock = 0;
+    pciedev_block* nextBlock = 0;
+    struct module_dev* mdev  = (struct module_dev*)(dev->dev_str);
     
-    for (; dataRead < ioctrl_dma->dma_size; )
+    for (; !retVal && (dataRead < dmaSize); )
     {
-        pciedev_block* block;
-        
-        retval = pciedev_wait_kring_dma(dev, ioctrl_dma->dma_offset + dataRead, &block);
-        if (block)
+        if (dataReq < dmaSize)
         {
-            if (copy_to_user(us_buffer + dataRead, (void*) block->kaddr, min(block->dma_size, ioctrl_dma->dma_size - dataRead)))
+            nextBlock = pciedev_start_dma(dev, devOffset + dataReq, dmaSize - dataReq);
+            if (IS_ERR(nextBlock))
             {
-                retval = -EFAULT;
-                break;
+                return PTR_ERR(nextBlock);
             }
-            dataRead += block->dma_size;
-            pciedev_bufring_release_buffer(module_dev, block);
-        } 
-        else
-        {
-            retval = -EFAULT;
-            break;
+            dataReq += nextBlock->dma_size;
         }
+        
+        if (!retVal && prevBlock)
+        {
+            retVal = pciedev_wait_dma_read(mdev, prevBlock);
+            if (!retVal)
+            {
+                if (copy_to_user(userBuffer + dataRead, (void*) prevBlock->kaddr, min(prevBlock->dma_size, dataSize - dataRead)))
+                {
+                    retVal = -EFAULT;
+                    break;
+                }
+                dataRead += prevBlock->dma_size;
+                pciedev_bufring_release_buffer(mdev, prevBlock);
+            }
+        }
+        
+        prevBlock = nextBlock;
     }
-    return retval;
+    
+    return retVal;
 }
 
 
-long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *arg_p, pciedev_cdev * pciedev_cdev_m)
+
+long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *arg_p, pciedev_cdev * pciedev_cdev_m)
 {
     unsigned int    cmd;
     unsigned long arg;
@@ -517,6 +360,7 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
                 return retval;
             }
             break;
+            
         case PCIEDEV_READ_DMA:
             retval = 0;
             if (copy_from_user(&dma_data, (device_ioctrl_dma*)arg, (size_t)io_dma_size)) {
@@ -642,13 +486,10 @@ long     pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long
                 return -EFAULT;
             }
             
-            retval = pciedev_request_dma(dev, &dma_data);
-            if (retval < 0) break;
-            
-            retval = pciedev_collect_dma(dev, &dma_data, (void*)arg);
-
+            retval = pciedev_dma_read(dev, dma_data.dma_offset, dma_data.dma_size, (void*)arg);
             break;
         }   
+        
         default:
             return -ENOTTY;
             break;
