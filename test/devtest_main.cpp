@@ -470,22 +470,29 @@ int main(int argc, char *argv[])
                 break;
 
             case MAIN_MENU_DMA_READ_PERFORMANCE_REPORT:
-                testLog.Init("DMA read 1000 * 512kB contiguously", &TestKringDmaRead, 0, 512*1024, 1000, 0);
+                testLog.Init("DMA read 1000 * 512kB contiguously ", &TestKringDmaRead, 0, 512*1024, 1000, 0);
                 testLog.Run(device.get(), true);
                 testLog.PrintStat(cout);                
                 
-                testLog.Init("DMA read 1000 * 1MB contiguously  ", &TestKringDmaRead, 0, 1024*1024, 1000, 0);
+                testLog.Init("DMA read 1000 * 1MB contiguously   ", &TestKringDmaRead, 0, 1024*1024, 1000, 0);
                 testLog.Run(device.get(), true);
                 testLog.PrintStat(cout, false);
                 
-                testLog.Init("DMA read 1000 * 512kB at 10Hz rate", &TestKringDmaRead, 0, 512*1024, 1000, 100000);
+                testLog.Init("DMA read 1000 * 16MB contiguously  ", &TestKringDmaRead, 0, 16*1024*1024, 1000, 0);
                 testLog.Run(device.get(), true);
                 testLog.PrintStat(cout, false);                
                 
-                testLog.Init("DMA read 1000 * 1MB at 10 Hz rate ", &TestKringDmaRead, 0, 1024*1024, 1000, 100000);
+                testLog.Init("DMA read 1000 * 512kB at 10Hz rate ", &TestKringDmaRead, 0, 512*1024, 1000, 100000);
                 testLog.Run(device.get(), true);
                 testLog.PrintStat(cout, false);                
                 
+                testLog.Init("DMA read 1000 * 1MB at 10Hz rate   ", &TestKringDmaRead, 0, 1024*1024, 1000, 100000);
+                testLog.Run(device.get(), true);
+                testLog.PrintStat(cout, false);                
+                
+                testLog.Init("DMA read 1000 * 16MB at 10Hz rate  ", &TestKringDmaRead, 0, 16*1024*1024, 1000, 100000);
+                testLog.Run(device.get(), true);
+                testLog.PrintStat(cout, false);                
                 break;
                 
                 
