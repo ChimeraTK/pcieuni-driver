@@ -159,7 +159,7 @@ pciedev_buffer *pciedev_start_dma_read(pciedev_dev* dev, unsigned long dmaOffset
     PDEBUG("pciedev_start_dma(dev.name= %s, offset=0x%lx, maxSize=0x%lx)\n",  dev->name, dmaOffset, size); 
     
     // Find and reserve target buffer
-    targetBuffer = pciedev_buffer_get_free(mdev);
+    targetBuffer = pciedev_buffer_get_free(&mdev->dmaBuffers);
     if (IS_ERR(targetBuffer)) 
     {
         return (targetBuffer == ERR_PTR(-EINTR)) ? targetBuffer : ERR_PTR(-ENOMEM);
@@ -207,7 +207,7 @@ cleanup_releaseBuffer:
     {
         // make buffer available for next DMA request
         dma_sync_single_for_cpu(&dev->pciedev_pci_dev->dev, targetBuffer->dma_handle, (size_t)targetBuffer->size, DMA_FROM_DEVICE);
-        pciedev_buffer_set_free(mdev, targetBuffer);
+        pciedev_buffer_set_free(&mdev->dmaBuffers, targetBuffer);
     }
     
     return retVal ? ERR_PTR(retVal) : targetBuffer;
@@ -285,7 +285,7 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
                 }
             }
             // mark buffer available
-            pciedev_buffer_set_free(mdev, prevBuffer); 
+            pciedev_buffer_set_free(&mdev->dmaBuffers, prevBuffer); 
         }
         
         prevBuffer = nextBuffer;
@@ -380,12 +380,12 @@ long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
             info.num_blocks = 0;
             info.block_size = 0;
             
-            if (!list_empty(&module_dev_pp->dma_bufferList))
+            if (!list_empty(&module_dev_pp->dmaBuffers.list))
             {
-                pciedev_buffer* block = list_first_entry(&module_dev_pp->dma_bufferList, struct pciedev_buffer, list);
+                pciedev_buffer* block = list_first_entry(&module_dev_pp->dmaBuffers.list, struct pciedev_buffer, list);
                 info.block_size = block->size;
                 
-                list_for_each_entry(block, &module_dev_pp->dma_bufferList, list)
+                list_for_each_entry(block, &module_dev_pp->dmaBuffers.list, list)
                 {
                     info.block_size = min(info.block_size, block->size);
                     info.num_blocks++;

@@ -1,4 +1,4 @@
-pciedev-objs := pciedev_drv.o pciedev_ioctl_dma.o 
+pciedev-objs := pciedev_drv.o pciedev_fnc.o pciedev_ioctl_dma.o 
 	
 obj-m := pciedev.o 
 #pciedev-y := pciedev_ufn.o pciedev.o

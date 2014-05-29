@@ -74,7 +74,7 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
         return IRQ_NONE; 
     }
   
-    PDEBUG("pciedev_interrupt(irq=%i, dev.name=%s): DMA finished (offset=0x%lx, size=0x%x)\n", irq, dev->name, mdev->dma_buffer->dma_offset, mdev->dma_buffer->dma_size);
+    PDEBUG("pciedev_interrupt(irq=%i, dev.name=%s): DMA finished (offset=0x%lx, size=0x%lx)\n", irq, dev->name, mdev->dma_buffer->dma_offset, mdev->dma_buffer->dma_size);
   
 #ifdef PCIEDEV_TEST_MISSING_INTERRUPT
     struct timeval currentTime;
@@ -98,7 +98,7 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
     static int __devinit pciedev_probe(struct pci_dev *dev, const struct pci_device_id *id)
 #endif
 {  
-    int result               = 0;
+    int result      = 0;
     int tmp_brd_num = -1;
     
     printk(KERN_ALERT "PCIEDEV_PROBE CALLED \n");
@@ -109,7 +109,8 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
     if(!result)
     {
         printk(KERN_ALERT "PCIEDEV_PROBE_EXP CREATING CURRENT STRUCTURE FOR BOARD %i\n", tmp_brd_num);
-        module_dev_p[tmp_brd_num] = pciedev_create_drvdata(tmp_brd_num, pciedev_cdev_m->pciedev_dev_m[tmp_brd_num], 2, kbuf_blk_sz_kb * 1024);
+        module_dev_p[tmp_brd_num] = pciedev_create_drvdata(tmp_brd_num, pciedev_cdev_m->pciedev_dev_m[tmp_brd_num], kbuf_blk_sz_kb * 1024);
+        
         if (IS_ERR(module_dev_p[tmp_brd_num]))
         {
             result = PTR_ERR(module_dev_p[tmp_brd_num]);
@@ -137,6 +138,7 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
      printk(KERN_ALERT "REMOVE CALLED\n");
      tmp_brd_num =pciedev_get_brdnum(dev);
      printk(KERN_ALERT "REMOVE CALLED FOR BOARD %i\n", tmp_brd_num);
+     
      
      // clean up any allocated resources and stuff here
      if (!IS_ERR_OR_NULL(module_dev_p[tmp_brd_num]))
