@@ -3,6 +3,7 @@
 
 #include "pciedev_io.h"
 #include "pciedev_ufn.h"
+#include "pciedev_buffer.h"
 
 #define DEVNAME "pciedev"	                             /* name of device */
 #define PCIEDEV_VENDOR_ID 0x10EE	                    /* XILINX vendor ID */
@@ -14,6 +15,10 @@
 #define DMA_CPU_ADDRESS          0x8
 #define DMA_SIZE_ADDRESS          0xC
 
-long     pciedev_ioctl_dma(struct file *, unsigned int* , unsigned long*, pciedev_cdev * );
+long pciedev_ioctl_dma(struct file *, unsigned int* , unsigned long*, pciedev_cdev * );
+
+int  pciedev_dma_reserve(module_dev* dev, pciedev_buffer* buffer);
+void pciedev_dma_release(module_dev* mdev);
+
 
 #endif /* _PCIEDEV_FNC_H_ */
