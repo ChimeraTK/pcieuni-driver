@@ -24,11 +24,22 @@ TDevice::TDevice(string deviceFile)
     : fFile(deviceFile)
 {
     fHandle = open(fFile.c_str(), O_RDWR);
+    if (fHandle < 0)
+    {
+        ostringstream stringStream;
+        stringStream << "open() ERROR! errno = " << errno << " (" << strerror(errno) << ")"; 
+        this->fError = stringStream.str();
+    }
 }
 
 int TDevice::Handle() const
 { 
     return fHandle; 
+}
+
+string TDevice::Name() const
+{
+    return fFile;
 }
 
 bool TDevice::StatusOk() const
@@ -44,22 +55,6 @@ const string TDevice::Error() const
 void TDevice::ResetStatus()
 {
     fError.clear();
-}
-
-device_ioctrl_kbuf_info TDevice::KbufInfo()
-{
-    device_ioctrl_kbuf_info info;
-    int code = ioctl(this->fHandle, PCIEDEV_KBUF_INFO, &info);
-    if (code != 0) 
-    {
-        info.block_size = 0;
-        info.num_blocks = 0;
-        ostringstream stringStream;
-        stringStream << "KbufInfo() ERROR! errno = " << errno << " (" << strerror(errno) << ")"; 
-        this->fError = stringStream.str();
-    }
-
-    return info;
 }
 
 int TDevice::RegWrite(int bar, long offset, unsigned int data, long dataSize)

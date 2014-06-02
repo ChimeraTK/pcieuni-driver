@@ -17,13 +17,14 @@ using namespace std;
 enum TMainMenuOption
 {
     MAIN_MENU_INVALID  = -1,
-
+    
+    MAIN_MENU_EXIT,
+    
+    MAIN_MENU_ALL_BOARDS_SETUP,
+    MAIN_MENU_ALL_BOARDS_RESET,
+    
     MAIN_MENU_REG_WRITE_32,
     MAIN_MENU_REG_READ,
-    
-    MAIN_MENU_BOARD_SETUP,
-    MAIN_MENU_BOARD_RESET,
-    
     MAIN_MENU_DMA_READ_SINGLE,
 
     MAIN_MENU_DMA_READ_PERFORMANCE_512KB,
@@ -34,21 +35,19 @@ enum TMainMenuOption
     MAIN_MENU_DMA_READ_PERFORMANCE_16MB_10HZ,
     
     MAIN_MENU_DMA_READ_PERFORMANCE_REPORT,
-    
-    MAIN_MENU_EXIT
 };
 
 TMainMenuOption GetMainMenuChoice()
 {
     map<TMainMenuOption, string> options;
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_EXIT, "Exit"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_REG_WRITE_32,                    "Write 32bit register"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_REG_READ,                        "Read 32bit register"));
-
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_BOARD_SETUP,                     "Setup board"));
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_BOARD_RESET,                     "Reset board"));
     
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_SINGLE,                 "DMA read device memory chunk"));    
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_ALL_BOARDS_SETUP,                "Setup all boards"));
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_ALL_BOARDS_RESET,                "Reset all boards"));
+    
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_REG_WRITE_32,                    "Write 32bit register on target device"));
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_REG_READ,                        "Read 32bit register from target device"));
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_SINGLE,                 "DMA read memory chunk from target device"));    
 
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_PERFORMANCE_512KB,      "Performance test: DMA read 512kB"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_PERFORMANCE_1MB,        "Performance test: DMA read 1MB"));
@@ -58,7 +57,7 @@ TMainMenuOption GetMainMenuChoice()
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_PERFORMANCE_1MB_10HZ,   "Performance test (10Hz): DMA read 1MB"));
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_PERFORMANCE_16MB_10HZ,  "Performance test (10Hz): DMA read 16MB"));
     
-    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_PERFORMANCE_REPORT,     "Collect performace data."));
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_PERFORMANCE_REPORT,     "Performance report (run all performance tests)."));
     
     cout << endl << endl << endl;
     cout << "********** Main Menu **********" << endl;
@@ -77,6 +76,30 @@ TMainMenuOption GetMainMenuChoice()
 
     return iter == options.end() ? MAIN_MENU_INVALID : iter->first;
 }
+
+IDevice* GetDeviceChoice(vector<unique_ptr<IDevice> >& devices)
+{
+    unsigned int choice = 0;
+
+    if (devices.size() == 1)
+    {
+        return devices[0].get();
+    }
+    
+    while ((choice <= 0) || (choice > devices.size()))
+    {
+        cout << "**** Choose target device:" << endl;
+        
+        for (unsigned int i = 0; i < devices.size(); i++)
+        {
+            cout << "(" << i+1 << ") \t" << devices[i].get()->Name() << endl;
+        }
+        cin >> choice;
+    }
+
+    return devices[choice-1].get();
+}
+
 
 int GetBarChoice()
 {
@@ -169,7 +192,7 @@ void DumpBuffer(vector<char>& buffer)
                     unsigned int b = buffer[offset + i] & 0xFF;
                     cout << " " <<  setw(2) << setfill('0') << b;
                 }
-                cout << dec << endl;
+                cout << dec << setfill(' ') << endl;
             }
         }
 
@@ -191,7 +214,7 @@ void DumpBuffer(vector<char>& buffer)
                 unsigned int b = buffer[i] & 0xFF;
                 cout << " " <<  setw(2) << setfill('0') << b;
             }
-            cout << dec << endl;
+            cout << dec << setfill(' ') << endl;
         
         }
         
@@ -221,7 +244,7 @@ void DumpBuffer(vector<char>& buffer)
 }
 
 
-void TestKringDmaRead(IDevice* device, TTest* test)
+void TestKringDmaRead(IDevice* device, TDevTest* test)
 {
     int code = 0;
     
@@ -254,23 +277,34 @@ void WriteWordReg(IDevice* device, int bar, long offset, unsigned int data)
 
 int main(int argc, char *argv[])
 {
-    unique_ptr<IDevice> device;
+    vector<unique_ptr<IDevice> > devices;
     
     if (argc < 2)
     {
         cout << endl;
         cout << "******************************" << endl;
-        cout << "*** Usage:" << argv[0] << " <character device file>" << endl;
+        cout << "*** Usage:" << argv[0] << " <character device file 1>" << " <character device file 2>" << " <character device file 3> ..." << endl;
         cout << "******************************" << endl;
         cout << endl;
         return -1;
     }
     
-    device.reset(new TDevice(argv[1]));
-    if (!device->StatusOk())
+    for (int i = 1; i<argc; i++)
     {
-        cout << "Device ERROR:" << device->Error();
-        return -1;
+#ifdef MOCK_DEVICES
+        devices.push_back(unique_ptr<IDevice>(new TDeviceMock(argv[i])));
+#else
+        devices.push_back(unique_ptr<IDevice>(new TDevice(argv[i])));
+#endif 
+    }
+    
+    for (std::vector<unique_ptr<IDevice> >::iterator iDevice = devices.begin(); iDevice != devices.end(); ++iDevice)
+    {
+        if (!(*iDevice)->StatusOk())
+        {
+            cout << "Device " << (*iDevice)->Name() << " ERROR:" << (*iDevice)->Error() << endl;
+            return -1;
+        }
     }
     
     TTest testLog;
@@ -282,23 +316,112 @@ int main(int argc, char *argv[])
         
         switch(option)
         {
-            
             case MAIN_MENU_EXIT:
             {
                 finished = true;
                 break;
             }
             
+            case MAIN_MENU_ALL_BOARDS_SETUP:
+            {   
+                for (std::vector<unique_ptr<IDevice> >::iterator iDevice = devices.begin(); iDevice != devices.end(); ++iDevice)
+                {
+                    IDevice* device = iDevice->get();
+                    
+                    unsigned int area_spi_div = 0x1000; // bar 0
+                    unsigned int word_clk_mux = 0x80;   // bar 0
+                    unsigned int word_clk_sel = 0x9C;   // bar 0
+                    unsigned int word_reset_n = 0x200;  // bar 0
+                    unsigned int area_spi_adc = 0x2000; // bar 0
+                    unsigned int word_adc_ena = 0x100;  // bar 0
+                    unsigned int word_timing_freq    = 0x20; // bar 1
+                    unsigned int word_timing_int_ena = 0x10; // bar 1
+                    unsigned int word_timing_trg_sel = 0x80; // bar 1
+                    unsigned int word_daq_enable     = 0x08; // bar 1
+                    
+                    cout << "******** Setup device " << device->Name() << " ************"  << endl;
+                    WriteByteReg(device, 0, area_spi_div + 0x45, 0x00);
+                    WriteByteReg(device, 0, area_spi_div + 0x0A, 0x43);
+                    WriteByteReg(device, 0, area_spi_div + 0x3C, 0x0C);
+                    WriteByteReg(device, 0, area_spi_div + 0x3D, 0x0C);
+                    WriteByteReg(device, 0, area_spi_div + 0x3E, 0x0C);
+                    WriteByteReg(device, 0, area_spi_div + 0x3F, 0x0C);
+                    WriteByteReg(device, 0, area_spi_div + 0x40, 0x02);
+                    WriteByteReg(device, 0, area_spi_div + 0x41, 0x02);
+                    WriteByteReg(device, 0, area_spi_div + 0x42, 0x02);
+                    WriteByteReg(device, 0, area_spi_div + 0x43, 0x02);
+                    WriteByteReg(device, 0, area_spi_div + 0x49, 0x80);
+                    WriteByteReg(device, 0, area_spi_div + 0x4B, 0x80);
+                    WriteByteReg(device, 0, area_spi_div + 0x4D, 0x80);
+                    WriteByteReg(device, 0, area_spi_div + 0x4F, 0x80);
+                    WriteByteReg(device, 0, area_spi_div + 0x51, 0x80);
+                    WriteByteReg(device, 0, area_spi_div + 0x53, 0x80);
+                    WriteByteReg(device, 0, area_spi_div + 0x55, 0x80);
+                    WriteByteReg(device, 0, area_spi_div + 0x57, 0x80);
+                    WriteByteReg(device, 0, area_spi_div + 0x5A, 0x81);
+                    
+                    WriteWordReg(device, 0, word_clk_mux + 0x00, 0);
+                    WriteWordReg(device, 0, word_clk_mux + 0x01, 0);
+                    WriteWordReg(device, 0, word_clk_mux + 0x02, 3);
+                    WriteWordReg(device, 0, word_clk_mux + 0x03, 3);
+                    
+                    WriteWordReg(device, 0, word_clk_sel + 0x00, 0); // 1
+
+                    WriteWordReg(device, 0, word_reset_n + 0x00, 1);
+                    
+                    WriteByteReg(device, 0, area_spi_adc + 0x00, 0x3C);
+                    WriteByteReg(device, 0, area_spi_adc + 0x14, 0x41);
+                    WriteByteReg(device, 0, area_spi_adc + 0x0D, 0x00);
+                    WriteByteReg(device, 0, area_spi_adc + 0xFF, 0x01);
+
+                    WriteWordReg(device, 0, word_adc_ena + 0x00, 1);
+
+                    WriteWordReg(device, 1, word_timing_freq + 0x00, 81250000);
+                    WriteWordReg(device, 1, word_timing_freq + 0x01, 0);
+                    WriteWordReg(device, 1, word_timing_freq + 0x02, 0);
+                    WriteWordReg(device, 1, word_timing_freq + 0x03, 0);
+                    WriteWordReg(device, 1, word_timing_freq + 0x04, 8);
+                    WriteWordReg(device, 1, word_timing_freq + 0x05, 8);
+                    WriteWordReg(device, 1, word_timing_freq + 0x06, 8);
+                    WriteWordReg(device, 1, word_timing_freq + 0x07, 0);
+
+                    WriteWordReg(device, 1, word_timing_trg_sel + 0x00, 0);
+                    
+                    WriteWordReg(device, 1, word_timing_int_ena + 0x00, 0xF1);
+
+                    WriteWordReg(device, 1, word_daq_enable + 0x00, 0x02);
+                }
+                
+                
+                continue;
+                break;
+            }
+
+            case MAIN_MENU_ALL_BOARDS_RESET:
+            {   
+                for (std::vector<unique_ptr<IDevice> >::iterator iDevice = devices.begin(); iDevice != devices.end(); ++iDevice)
+                {
+                    IDevice* device = iDevice->get();
+                    unsigned int word_reset_n = 0x200;  // bar 0        
+                    cout << "******** Trigget device " << device->Name() << "reset register ************"  << endl;
+                    WriteWordReg(device, 0, word_reset_n + 0x00, 1);
+                }
+                
+                continue;
+                break;
+            }
+            
             case MAIN_MENU_REG_WRITE_32:
             {   
                 cout << "******** Write to device register ************"  << endl;
+                IDevice* device = GetDeviceChoice(devices);
                 int bar     = GetBarChoice();
                 long offset = GetOffsetChoice();
                 vector<unsigned char> data = GetData32();
                 
-                if (device.get()->RegWrite(bar, offset, *(reinterpret_cast<u_int*>(&data[0])), 4))
+                if (device->RegWrite(bar, offset, *(reinterpret_cast<u_int*>(&data[0])), 4))
                 {
-                    cout << "*** Stauts: ERROR: " << device.get()->Error() << endl;
+                    cout << "*** Stauts: ERROR: " << device->Error() << endl;
                 }
                 else
                 {
@@ -309,100 +432,19 @@ int main(int argc, char *argv[])
                 continue;
                 break;
             }
-
-            case MAIN_MENU_BOARD_SETUP:
-            {   
-                unsigned int area_spi_div = 0x1000; // bar 0
-                unsigned int word_clk_mux = 0x80;   // bar 0
-                unsigned int word_clk_sel = 0x9C;   // bar 0
-                unsigned int word_reset_n = 0x200;  // bar 0
-                unsigned int area_spi_adc = 0x2000; // bar 0
-                unsigned int word_adc_ena = 0x100;  // bar 0
-                unsigned int word_timing_freq    = 0x20; // bar 1
-                unsigned int word_timing_int_ena = 0x10; // bar 1
-                unsigned int word_timing_trg_sel = 0x80; // bar 1
-                unsigned int word_daq_enable     = 0x08; // bar 1
-                
-                cout << "******** Setup device registers ************"  << endl;
-                WriteByteReg(device.get(), 0, area_spi_div + 0x45, 0x00);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x0A, 0x43);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x3C, 0x0C);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x3D, 0x0C);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x3E, 0x0C);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x3F, 0x0C);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x40, 0x02);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x41, 0x02);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x42, 0x02);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x43, 0x02);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x49, 0x80);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x4B, 0x80);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x4D, 0x80);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x4F, 0x80);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x51, 0x80);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x53, 0x80);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x55, 0x80);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x57, 0x80);
-                WriteByteReg(device.get(), 0, area_spi_div + 0x5A, 0x81);
-                
-                WriteWordReg(device.get(), 0, word_clk_mux + 0x00, 0);
-                WriteWordReg(device.get(), 0, word_clk_mux + 0x01, 0);
-                WriteWordReg(device.get(), 0, word_clk_mux + 0x02, 3);
-                WriteWordReg(device.get(), 0, word_clk_mux + 0x03, 3);
-                
-                WriteWordReg(device.get(), 0, word_clk_sel + 0x00, 0); // 1
-
-                WriteWordReg(device.get(), 0, word_reset_n + 0x00, 1);
-                
-                WriteByteReg(device.get(), 0, area_spi_adc + 0x00, 0x3C);
-                WriteByteReg(device.get(), 0, area_spi_adc + 0x14, 0x41);
-                WriteByteReg(device.get(), 0, area_spi_adc + 0x0D, 0x00);
-                WriteByteReg(device.get(), 0, area_spi_adc + 0xFF, 0x01);
-
-                WriteWordReg(device.get(), 0, word_adc_ena + 0x00, 1);
-
-                WriteWordReg(device.get(), 1, word_timing_freq + 0x00, 81250000);
-                WriteWordReg(device.get(), 1, word_timing_freq + 0x01, 0);
-                WriteWordReg(device.get(), 1, word_timing_freq + 0x02, 0);
-                WriteWordReg(device.get(), 1, word_timing_freq + 0x03, 0);
-                WriteWordReg(device.get(), 1, word_timing_freq + 0x04, 8);
-                WriteWordReg(device.get(), 1, word_timing_freq + 0x05, 8);
-                WriteWordReg(device.get(), 1, word_timing_freq + 0x06, 8);
-                WriteWordReg(device.get(), 1, word_timing_freq + 0x07, 0);
-
-                WriteWordReg(device.get(), 1, word_timing_trg_sel + 0x00, 0);
-                
-                WriteWordReg(device.get(), 1, word_timing_int_ena + 0x00, 0xF1);
-
-                WriteWordReg(device.get(), 1, word_daq_enable + 0x00, 0x02);
-                
-                
-                continue;
-                break;
-            }
-
-            case MAIN_MENU_BOARD_RESET:
-            {   
-                unsigned int word_reset_n = 0x200;  // bar 0
-                
-                cout << "******** Setup device registers ************"  << endl;
-                
-                WriteWordReg(device.get(), 0, word_reset_n + 0x00, 1);
-                
-                continue;
-                break;
-            }
             
             case MAIN_MENU_REG_READ:
             {
                 cout << "******** Read from device register ***********"  << endl;
+                IDevice* device = GetDeviceChoice(devices);
                 int bar     = GetBarChoice();
                 long offset = GetOffsetChoice();
                 vector<unsigned char> data;
                 data.resize(4);
                 
-                if (device.get()->RegRead(bar, offset, &(data[0]), 4))
+                if (device->RegRead(bar, offset, &(data[0]), 4))
                 {
-                    cout << "*** Stauts: ERROR: " << device.get()->Error() << endl;
+                    cout << "*** Stauts: ERROR: " << device->Error() << endl;
                 }
                 else
                 {
@@ -422,76 +464,78 @@ int main(int argc, char *argv[])
             
             case MAIN_MENU_DMA_READ_SINGLE:
             {
+                vector<unique_ptr<IDevice> > tgtDevices(1);
+                tgtDevices[0].reset(GetDeviceChoice(devices));
                 long offset = GetOffsetChoice();
                 long bytes  = GetTotalBytesChoice();
                 
                 testLog.Init("DMA read from device memory", &TestKringDmaRead, offset, bytes, 1, 0);
-                testLog.Run(device.get());
-                DumpBuffer(testLog.fBuffer);
+                testLog.Run(tgtDevices);
+                DumpBuffer(testLog.Buffer(0));
                 
                 break;
             }
 
             case MAIN_MENU_DMA_READ_PERFORMANCE_512KB:
                 testLog.Init("DMA read performance test", &TestKringDmaRead, 0, 512*1024, 1000, 0);
-                testLog.Run(device.get());
+                testLog.Run(devices);
                 testLog.PrintStat(cout);
                 break;
                 
             case MAIN_MENU_DMA_READ_PERFORMANCE_1MB:
                 testLog.Init("DMA read performance test", &TestKringDmaRead, 0, 1024*1024, 1000, 0);
-                testLog.Run(device.get());
+                testLog.Run(devices);
                 testLog.PrintStat(cout);
                 break;
 
             case MAIN_MENU_DMA_READ_PERFORMANCE_16MB:
                 testLog.Init("DMA read performance test", &TestKringDmaRead, 0, 16*1024*1024, 1000, 0);
-                testLog.Run(device.get());
+                testLog.Run(devices);
                 testLog.PrintStat(cout);
                 break;
                 
             case MAIN_MENU_DMA_READ_PERFORMANCE_512KB_10HZ:
                 testLog.Init("10Hz DMA read performance test", &TestKringDmaRead, 0, 512*1024, 1000, 100000);
-                testLog.Run(device.get());
+                testLog.Run(devices);
                 testLog.PrintStat(cout);
                 break;
 
             case MAIN_MENU_DMA_READ_PERFORMANCE_1MB_10HZ:
                 testLog.Init("10Hz DMA read performance test", &TestKringDmaRead, 0, 1024*1024, 1000, 100000);
-                testLog.Run(device.get());
+                testLog.Run(devices);
                 testLog.PrintStat(cout);
                 break;
 
                 
             case MAIN_MENU_DMA_READ_PERFORMANCE_16MB_10HZ:
                 testLog.Init("10Hz DMA read performance test", &TestKringDmaRead, 0, 16*1024*1024, 1000, 100000);
-                testLog.Run(device.get());
+                testLog.Run(devices);
                 testLog.PrintStat(cout);                
                 break;
 
             case MAIN_MENU_DMA_READ_PERFORMANCE_REPORT:
                 testLog.Init("DMA read 1000 * 512kB contiguously ", &TestKringDmaRead, 0, 512*1024, 1000, 0);
-                testLog.Run(device.get(), true);
+                testLog.Run(devices, true);
                 testLog.PrintStat(cout);                
                 
                 testLog.Init("DMA read 1000 * 1MB contiguously   ", &TestKringDmaRead, 0, 1024*1024, 1000, 0);
-                testLog.Run(device.get(), true);
+                testLog.Run(devices, true);
                 testLog.PrintStat(cout, false);
                 
                 testLog.Init("DMA read 1000 * 16MB contiguously  ", &TestKringDmaRead, 0, 16*1024*1024, 1000, 0);
-                testLog.Run(device.get(), true);
+                testLog.Run(devices, true);
                 testLog.PrintStat(cout, false);                
                 
                 testLog.Init("DMA read 1000 * 512kB at 10Hz rate ", &TestKringDmaRead, 0, 512*1024, 1000, 100000);
-                testLog.Run(device.get(), true);
+                testLog.Run(devices, true);
                 testLog.PrintStat(cout, false);                
                 
                 testLog.Init("DMA read 1000 * 1MB at 10Hz rate   ", &TestKringDmaRead, 0, 1024*1024, 1000, 100000);
-                testLog.Run(device.get(), true);
+                testLog.Run(devices, true);
                 testLog.PrintStat(cout, false);                
                 
                 testLog.Init("DMA read 1000 * 16MB at 10Hz rate  ", &TestKringDmaRead, 0, 16*1024*1024, 1000, 100000);
-                testLog.Run(device.get(), true);
+                testLog.Run(devices, true);
                 testLog.PrintStat(cout, false);                
                 break;
                 

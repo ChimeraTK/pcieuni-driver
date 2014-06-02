@@ -5,6 +5,9 @@ CXX           = g++
 DEFINES       = 
 CFLAGS        = -pipe -g -Wall -W -D_REENTRANT $(DEFINES)
 CXXFLAGS      = -pipe -g -std=c++0x -Wall -Wextra -pedantic -W -D_REENTRANT $(DEFINES)
+
+debug:  CXXFLAGS += -DMOCK_DEVICES
+
 ifdef UPCIEDEV_INCLUDE
 	CXXFLAGS += -I$(UPCIEDEV_INCLUDE)
 endif
@@ -20,8 +23,9 @@ SOURCES = $(wildcard *.cpp)
 OBJECTS = $(SOURCES:.cpp=.o)
 TARGET  = devtest
 
-
 all: $(TARGET)
+
+debug: $(TARGET)
 
 $(TARGET):  $(OBJECTS)  
 	$(LINK) $(LFLAGS) -o $(TARGET) $(OBJECTS) $(OBJCOMP) $(LIBS)
