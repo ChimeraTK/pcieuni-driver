@@ -1,6 +1,8 @@
 #ifndef _PCIEDEV_FNC_H_
 #define _PCIEDEV_FNC_H_
 
+#include <linux/semaphore.h>
+
 #include "pciedev_io.h"
 #include "pciedev_ufn.h"
 #include "pciedev_buffer.h"
@@ -25,18 +27,17 @@ struct module_dev {
     int                waitFlag;
     wait_queue_head_t  waitDMA;
     struct semaphore   dma_sem;
-    
     pciedev_buffer     *dma_buffer;
+    
     struct pciedev_dev *parent_dev;
 };
 typedef struct module_dev module_dev;
 
-module_dev* pciedev_get_moduledata(struct pciedev_dev *dev);
+module_dev* pciedev_create_mdev(int brd_num, pciedev_dev* pcidev, unsigned long bufferSize);
+void pciedev_release_mdev(module_dev* mdev);
+module_dev* pciedev_get_mdev(struct pciedev_dev *dev);
 
 long pciedev_ioctl_dma(struct file *, unsigned int* , unsigned long*, pciedev_cdev * );
-
-module_dev* pciedev_create_drvdata(int brd_num, pciedev_dev* pcidev, unsigned long bufferSize);
-void pciedev_release_drvdata(module_dev* mdev);
 
 int  pciedev_dma_reserve(module_dev* dev, pciedev_buffer* buffer);
 void pciedev_dma_release(module_dev* mdev);

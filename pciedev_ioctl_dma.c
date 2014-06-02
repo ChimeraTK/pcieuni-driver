@@ -29,7 +29,7 @@ int pciedev_dma_reserve(module_dev* mdev, pciedev_buffer* buffer)
     long waitVal = 0;
     long timeout = HZ/1;
     
-    PDEBUG("pciedev_dma_reserve(dev.name=%s)", mdev->parent_dev->name);
+    PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve()");
     
     if (down_interruptible(&mdev->dma_sem))
     {
@@ -41,22 +41,22 @@ int pciedev_dma_reserve(module_dev* mdev, pciedev_buffer* buffer)
     {
         up(&mdev->dma_sem);
 
-        PDEBUG("pciedev_dma_reserve(dev.name=%s): Waiting until dma available...\n", mdev->parent_dev->name); 
+        PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Waiting until dma available...\n"); 
         waitVal = wait_event_interruptible_timeout(mdev->waitDMA, mdev->waitFlag, timeout);
         if (0 == waitVal)
         {
-            PDEBUG("pciedev_dma_reserve(dev.name=%s): Timeout!\n", mdev->parent_dev->name); 
+            PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Timeout!\n"); 
             return -EBUSY; 
         }
         else if (0 > waitVal)
         {
-            PDEBUG("pciedev_dma_reserve(dev.name=%s): Interrupted!\n", mdev->parent_dev->name); 
+            PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Interrupted!\n"); 
             return -EINTR;
         }
         
         if (down_interruptible(&mdev->dma_sem))
         {
-            PDEBUG("pciedev_dma_reserve(dev.name=%s): Interrupted!\n", mdev->parent_dev->name); 
+            PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Interrupted!\n"); 
             return -EINTR;
         }        
     }
@@ -77,7 +77,7 @@ int pciedev_dma_reserve(module_dev* mdev, pciedev_buffer* buffer)
  */
 void pciedev_dma_release(module_dev* mdev)
 {
-    PDEBUG("pciedev_dma_release(dev.name=%s)", mdev->parent_dev->name);
+    PDEBUG(mdev->parent_dev->name, "pciedev_dma_release()");
     mdev->waitFlag   = 1;
     mdev->dma_buffer = 0; 
     wake_up_interruptible(&(mdev->waitDMA));
@@ -98,11 +98,11 @@ int pciedev_wait_dma_read(module_dev* mdev, pciedev_buffer* buffer)
     int   code;
     ulong timeout = HZ/1; // Timeout in 1 second
     
-    PDEBUG("pciedev_wait_dma_read(dev.name=%s, offset=0x%lx, size=0x%lx)", mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size);
+    PDEBUG(mdev->parent_dev->name, "pciedev_wait_dma_read(offset=0x%lx, size=0x%lx)", buffer->dma_offset, buffer->dma_size);
     while(test_bit(BUFFER_STATE_WAITING, &buffer->state))
     {
         // DMA not finished yet - wait for IRQ handler 
-        PDEBUG("pciedev_wait_dma_read(dev.name=%s, offset=0x%lx, size=0x%lx): Waiting... \n",  mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size); 
+        PDEBUG( mdev->parent_dev->name, "pciedev_wait_dma_read(offset=0x%lx, size=0x%lx): Waiting... \n", buffer->dma_offset, buffer->dma_size); 
         
         code = wait_event_interruptible_timeout( mdev->waitDMA, !test_bit(BUFFER_STATE_WAITING, &buffer->state), timeout);
         if (code == 0)
@@ -110,7 +110,7 @@ int pciedev_wait_dma_read(module_dev* mdev, pciedev_buffer* buffer)
             printk(KERN_ALERT "PCIEDEV(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): TIMEOUT!\n", 
                    mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size);
 
-            pciedev_dma_release(mdev); // TODO: disable/enable interrupts?
+            pciedev_dma_release(mdev); 
             return -EIO; 
         }
         else if (code < 0)
@@ -118,13 +118,13 @@ int pciedev_wait_dma_read(module_dev* mdev, pciedev_buffer* buffer)
             printk(KERN_ALERT "PCIEDEV(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): errno=%d!\n", 
                    mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size, code);
             
-            pciedev_dma_release(mdev); // TODO: disable/enable interrupts?
+            pciedev_dma_release(mdev);
             return -EINTR; 
         }
     }
     
     dma_sync_single_for_cpu(&mdev->parent_dev->pciedev_pci_dev->dev, buffer->dma_handle, (size_t)buffer->size, DMA_FROM_DEVICE);
-    PDEBUG("pciedev_wait_dma_read(dev.name=%s, offset=0x%lx, size=0x%lx): Done!", mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size);
+    PDEBUG(mdev->parent_dev->name, "pciedev_wait_dma_read(offset=0x%lx, size=0x%lx): Done!",  buffer->dma_offset, buffer->dma_size);
     
     do_gettimeofday(&(mdev->dma_stop_time));
     return 0;
@@ -152,14 +152,14 @@ int pciedev_wait_dma_read(module_dev* mdev, pciedev_buffer* buffer)
  */
 pciedev_buffer *pciedev_start_dma_read(pciedev_dev* dev, unsigned long dmaOffset, unsigned long size)
 {
-    struct module_dev *mdev = pciedev_get_moduledata(dev);
+    struct module_dev *mdev = pciedev_get_mdev(dev);
     pciedev_buffer *targetBuffer = 0;
     int retVal = 0;
     
-    PDEBUG("pciedev_start_dma(dev.name= %s, offset=0x%lx, maxSize=0x%lx)\n",  dev->name, dmaOffset, size); 
+    PDEBUG(dev->name, "pciedev_start_dma(offset=0x%lx, maxSize=0x%lx)\n", dmaOffset, size); 
     
     // Find and reserve target buffer
-    targetBuffer = pciedev_buffer_get_free(&mdev->dmaBuffers);
+    targetBuffer = pciedev_bufferList_get_free(&mdev->dmaBuffers);
     if (IS_ERR(targetBuffer)) 
     {
         return (targetBuffer == ERR_PTR(-EINTR)) ? targetBuffer : ERR_PTR(-ENOMEM);
@@ -175,11 +175,11 @@ pciedev_buffer *pciedev_start_dma_read(pciedev_dev* dev, unsigned long dmaOffset
     if (retVal) goto cleanup_releaseBuffer;
     
     // write DMA source address to device register
-    retVal = pciedev_register_write32(targetBuffer->dma_offset, (void*)(dev->memmory_base2 + DMA_BOARD_ADDRESS), false);
+    retVal = pciedev_register_write32(dev, dev->memmory_base2, DMA_BOARD_ADDRESS, targetBuffer->dma_offset, false);
     if (retVal) goto cleanup_releaseDevice;
     
     // write DMA destination address to device register
-    retVal = pciedev_register_write32((u32)(targetBuffer->dma_handle & 0xFFFFFFFF), (void*)(dev->memmory_base2 + DMA_CPU_ADDRESS), true);
+    retVal = pciedev_register_write32(dev, dev->memmory_base2, DMA_CPU_ADDRESS, (u32)(targetBuffer->dma_handle & 0xFFFFFFFF), true);
     if (retVal) goto cleanup_releaseDevice; 
     
     do_gettimeofday(&(mdev->dma_start_time));
@@ -189,10 +189,10 @@ pciedev_buffer *pciedev_start_dma_read(pciedev_dev* dev, unsigned long dmaOffset
     mdev->dma_buffer = targetBuffer; 
     
     // write DMA size and start DMA
-    retVal = pciedev_register_write32(targetBuffer->dma_size, (void*)(dev->memmory_base2 + DMA_SIZE_ADDRESS ), false);
+    retVal = pciedev_register_write32(dev, dev->memmory_base2, DMA_SIZE_ADDRESS, targetBuffer->dma_size, false);
     if (retVal) goto cleanup_releaseDevice; 
     
-    PDEBUG("pciedev_start_dma(dev.name=%s): DMA started, offset=0x%lx, size=0x%lx \n", dev->name, targetBuffer->dma_offset, targetBuffer->dma_size); 
+    PDEBUG(dev->name, "pciedev_start_dma(): DMA started, offset=0x%lx, size=0x%lx \n", targetBuffer->dma_offset, targetBuffer->dma_size); 
     
     
 cleanup_releaseDevice:
@@ -207,7 +207,7 @@ cleanup_releaseBuffer:
     {
         // make buffer available for next DMA request
         dma_sync_single_for_cpu(&dev->pciedev_pci_dev->dev, targetBuffer->dma_handle, (size_t)targetBuffer->size, DMA_FROM_DEVICE);
-        pciedev_buffer_set_free(&mdev->dmaBuffers, targetBuffer);
+        pciedev_bufferList_set_free(&mdev->dmaBuffers, targetBuffer);
     }
     
     return retVal ? ERR_PTR(retVal) : targetBuffer;
@@ -237,9 +237,9 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
     unsigned long dataRead  = 0;  // Total size of data read from device
     pciedev_buffer* prevBuffer = 0; // buffer used for read in previous loop
     pciedev_buffer* nextBuffer = 0; // buffer to read to in this loop
-    struct module_dev* mdev  = pciedev_get_moduledata(dev);
+    struct module_dev* mdev  = pciedev_get_mdev(dev);
     
-    PDEBUG("pciedev_dma_read(dev.name=%s, devOffset=0x%lx, dataSize=0x%lx)\n",  dev->name, devOffset, dataSize); 
+    PDEBUG(dev->name, "pciedev_dma_read(devOffset=0x%lx, dataSize=0x%lx)\n", devOffset, dataSize); 
     
     // Loop until data is read 
     for (; !IS_ERR(prevBuffer) && (dataRead < dmaSize); )
@@ -285,7 +285,7 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
                 }
             }
             // mark buffer available
-            pciedev_buffer_set_free(&mdev->dmaBuffers, prevBuffer); 
+            pciedev_bufferList_set_free(&mdev->dmaBuffers, prevBuffer); 
         }
         
         prevBuffer = nextBuffer;
@@ -296,7 +296,7 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
         retVal = retVal ? retVal : PTR_ERR(prevBuffer);
     }
     
-    PDEBUG("pciedev_dma_read(dev.name=%s, devOffset=0x%lx, dataSize=0x%lx): Return code(%i)\n",  dev->name, devOffset, dataSize, retVal); 
+    PDEBUG(dev->name, "pciedev_dma_read(devOffset=0x%lx, dataSize=0x%lx): Return code(%i)\n", devOffset, dataSize, retVal); 
     
     return retVal;
 }
@@ -321,7 +321,7 @@ long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
     
     module_dev       *module_dev_pp;
     pciedev_dev       *dev  = filp->private_data;
-    module_dev_pp = pciedev_get_moduledata(dev);
+    module_dev_pp = pciedev_get_mdev(dev);
     
     cmd         = *cmd_p;
     arg         = *arg_p;
@@ -339,7 +339,7 @@ long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
         return retval;
     }
     
-    PDEBUG("pciedev_ioctl_dma(dev.name=%s, nr=%d )", dev->name, _IOC_NR(cmd));
+    PDEBUG(dev->name, "pciedev_ioctl_dma(nr=%d )", _IOC_NR(cmd));
     
     /*
     * the direction is a bitmask, and VERIFY_WRITE catches R/W
@@ -380,12 +380,12 @@ long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
             info.num_blocks = 0;
             info.block_size = 0;
             
-            if (!list_empty(&module_dev_pp->dmaBuffers.list))
+            if (!list_empty(&module_dev_pp->dmaBuffers.head))
             {
-                pciedev_buffer* block = list_first_entry(&module_dev_pp->dmaBuffers.list, struct pciedev_buffer, list);
+                pciedev_buffer* block = list_first_entry(&module_dev_pp->dmaBuffers.head, struct pciedev_buffer, list);
                 info.block_size = block->size;
                 
-                list_for_each_entry(block, &module_dev_pp->dmaBuffers.list, list)
+                list_for_each_entry(block, &module_dev_pp->dmaBuffers.head, list)
                 {
                     info.block_size = min(info.block_size, block->size);
                     info.num_blocks++;
