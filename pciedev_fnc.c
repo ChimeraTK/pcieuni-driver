@@ -25,6 +25,10 @@ module_dev* pciedev_create_mdev(int brd_num, pciedev_dev* pcidev, unsigned long 
     
     PDEBUG(pcidev->name, "pciedev_create_mdev(brd_num=%i)", brd_num);
     
+#ifdef PCIEDEV_TEST_MDEV_ALLOC_FAILURE
+    TEST_RANDOM_EXIT(1, "PCIEDEV: Simulating failed allocation of module_dev structure!", ERR_PTR(-ENOMEM))
+#endif   
+    
     mdev = kzalloc(sizeof(module_dev), GFP_KERNEL);
     if(!mdev) 
     {
@@ -46,8 +50,8 @@ module_dev* pciedev_create_mdev(int brd_num, pciedev_dev* pcidev, unsigned long 
     
     if (IS_ERR(buffer))
     {
-        pciedev_release_mdev(mdev);
-        return ERR_CAST(buffer);
+        printk(KERN_ERR "PCIEDEV(%s): Failed to allocate DMA buffers!\n", pcidev->name);
+        pciedev_bufferList_clear(&mdev->dmaBuffers);
     }
     
     init_waitqueue_head(&mdev->waitDMA);
@@ -68,10 +72,10 @@ module_dev* pciedev_create_mdev(int brd_num, pciedev_dev* pcidev, unsigned long 
  */
 void pciedev_release_mdev(module_dev* mdev)
 {
-    PDEBUG(mdev->parent_dev->name, "pciedev_release_mdev()");
-    
     if (!IS_ERR_OR_NULL(mdev))
     {
+        PDEBUG(mdev->parent_dev->name, "pciedev_release_mdev()");
+        
         // clear the buffers gracefully
         pciedev_bufferList_clear(&mdev->dmaBuffers);
         
@@ -134,6 +138,10 @@ int pciedev_dma_reserve(module_dev* mdev, pciedev_buffer* buffer)
             PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Interrupted!\n"); 
             return -EINTR;
         }
+        
+#ifdef PCIEDEV_TEST_DEVICE_DMA_BLOCKED
+        TEST_RANDOM_EXIT(100, "PCIEDEV: Simulating blocked DMA !", -EBUSY)
+#endif
         
         // protect against concurrent reservation of waitFlag
         if (down_interruptible(&mdev->dma_sem))

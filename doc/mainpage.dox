@@ -1,0 +1,67 @@
+/**
+@mainpage Desy PCIe Device Driver documentation
+Desy PCIe Device Driver is a kernel loadable module that provices device specific part of driver implementation. 
+It was developed and tested to work with the following borads:
+- SIS8300L with firmware .. TODO 
+ 
+@section Dependencies
+This module loads on top of the Desy PCIe Common Device Driver (upciedev module). 
+
+@section Build
+    Make sure to first build the upciedev module, because this will install the required header and symbol files.  
+
+    For release build type:
+    @code
+        make clean all
+    @endcode
+
+    For debug build type:
+    @code
+        make clean debug
+    @endcode
+
+@section install_run Install & run
+
+    Type:
+
+    @code
+        make install
+        modprobe pciedev
+    @endcode
+
+    Alternatively one may specify particular size of memory buffers that are used in DMA read operation. The size is 
+    specified in kB and should be a number that equals any power of 2 between 4 and 4096. Example: 
+
+    @code
+        make install
+        modprobe pciedev kbuf_blk_sz_kb=256
+    @endcode
+
+@section parameters Module parameters
+- Size of DMA read buffers: ::kbuf_blk_sz_kb
+
+@section Functionality
+Most of PCIe Device Driver functionality is simply a pass through to facilities provided by the Desy PCIe Common Device
+Driver. It does however add the following functionalities:
+
+    @subsection dma-read DMA-read operation
+    DMA read operation is realized as a blocking ioctl() call. Example:
+    @code
+        static device_ioctrl_dma dma_rw;
+        dma_rw.dma_size    = 1024*1024
+        dma_rw.dma_offset  = 0;
+        vector<char> tgtBuffer(1024*1024);
+        memcpy(tgtBuffer, dma_rw, sizeof(device_ioctrl_dma));
+        int code = ioctl(devHandle, PCIEDEV_READ_DMA, tgtBuffer);
+    @endcode
+
+    DMA read algorithm uses a pair of buffers which are allocated on device probe. By default each buffer is 128kB in 
+    size, but one can modify buffer size via module load parameter ::kbuf_blk_sz_kb. DMA read request is first broken
+    into pieces that fit into kernel buffers, then the two buffers are used interchangeably as DMA target. Each DMA 
+    packet is then copied to user space. Copy to user space is done in parallel to PCI board copying data to the other 
+    buffer (via DMA). 
+    The core of DMA read algorithm is implemented in function ::pciedev_dma_read(). Note that PCI device singles an 
+    interrupt to let driver know when DMA has finished. Thus one should look at the ::pciedev_interrupt() interrupt 
+    handler to get the whole picture.
+
+*/

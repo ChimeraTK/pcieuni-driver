@@ -85,13 +85,7 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
     PDEBUG(dev->name,"pciedev_interrupt(irq=%i): DMA finished (offset=0x%lx, size=0x%lx)\n", irq, mdev->dma_buffer->dma_offset, mdev->dma_buffer->dma_size);
   
 #ifdef PCIEDEV_TEST_MISSING_INTERRUPT
-    struct timeval currentTime;
-    do_gettimeofday(&currentTime);
-    if (currentTime.tv_usec % 10 == 0)
-    {
-        printk( KERN_ALERT "PCIEDEV: Simulating missing interrupt!");
-        return IRQ_NONE;
-    }
+    TEST_RANDOM_EXIT(100, "PCIEDEV: Simulating missing interrupt!", IRQ_NONE)
 #endif
   
     clear_bit(BUFFER_STATE_WAITING, &mdev->dma_buffer->state);
@@ -123,6 +117,9 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
         {
             result = PTR_ERR(module_dev_p[tmp_brd_num]);
             printk(KERN_ERR "PCIEDEV_PROBE Failed to allocte device driver structures for board %i (errno=%i)\n", tmp_brd_num, result);
+            
+            pciedev_remove_exp(dev,  &pciedev_cdev_m, DEVNAME, &tmp_brd_num);
+            printk(KERN_ALERT "PCIEDEV_REMOVE_EXP CALLED  FOR SLOT %i\n", tmp_brd_num);
             return result;
         }
         printk(KERN_ALERT "PCIEDEV_PROBE CALLED; CURRENT STRUCTURE CREATED \n");

@@ -37,7 +37,7 @@ pciedev_buffer *pciedev_start_dma_read(pciedev_dev* dev, unsigned long dmaOffset
     pciedev_buffer *targetBuffer = 0;
     int retVal = 0;
     
-    PDEBUG(dev->name, "pciedev_start_dma(offset=0x%lx, maxSize=0x%lx)\n", dmaOffset, size); 
+    PDEBUG(dev->name, "pciedev_start_dma_read(offset=0x%lx, maxSize=0x%lx)\n", dmaOffset, size); 
     
     // Find and reserve target buffer
     targetBuffer = pciedev_bufferList_get_free(&mdev->dmaBuffers);
@@ -73,7 +73,7 @@ pciedev_buffer *pciedev_start_dma_read(pciedev_dev* dev, unsigned long dmaOffset
     retVal = pciedev_register_write32(dev, dev->memmory_base2, DMA_SIZE_ADDRESS, targetBuffer->dma_size, false);
     if (retVal) goto cleanup_releaseDevice; 
     
-    PDEBUG(dev->name, "pciedev_start_dma(): DMA started, offset=0x%lx, size=0x%lx \n", targetBuffer->dma_offset, targetBuffer->dma_size); 
+    PDEBUG(dev->name, "pciedev_start_dma_read(): DMA started, offset=0x%lx, size=0x%lx \n", targetBuffer->dma_offset, targetBuffer->dma_size); 
     
     
 cleanup_releaseDevice:
@@ -123,6 +123,7 @@ int pciedev_wait_dma_read(module_dev* mdev, pciedev_buffer* buffer)
             printk(KERN_ALERT "PCIEDEV(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): TIMEOUT!\n", 
                    mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size);
             
+            // assuming we missed the interrupt
             pciedev_dma_release(mdev); 
             return -EIO; 
         }
@@ -131,6 +132,7 @@ int pciedev_wait_dma_read(module_dev* mdev, pciedev_buffer* buffer)
             printk(KERN_ALERT "PCIEDEV(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): errno=%d!\n", 
                    mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size, code);
             
+            // assuming we missed the interrupt
             pciedev_dma_release(mdev);
             return -EINTR; 
         }

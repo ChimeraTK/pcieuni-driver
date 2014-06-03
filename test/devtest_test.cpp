@@ -34,17 +34,23 @@ void TTest::Run(vector<unique_ptr<IDevice> > &devices, bool silent)
     // Run test fNRuns times
     for (int i = 0; i < this->fNRuns; i++)
     {
-        
+        bool workDone = false;
         // Take test-start timestamp
         fStartTimers[i].reset(new TTimer());
         
         // Run test on each device
         for (unsigned int d = 0; d < fDevTests.size(); d++)
         {
-            fDevTests[d].get()->Run(i);
+            workDone |= fDevTests[d].get()->Run(i);
         }
         fEndTimers[i].reset(new TTimer());
         // Take test-end timestamp
+        
+        if (!workDone) 
+        {
+            // no work was done, all devices must be in error state
+            break;
+        }
         
         // sleep until it is time for the next test run
         long us = fEndTimers[i].get()->RealTime() - fStartTimers[i].get()->RealTime();
@@ -238,9 +244,12 @@ TDevTest::TDevTest(string testName, IDevice* device, TFn* testFn, long startOffs
 
 bool TDevTest::Run(int testIndex)
 {
-    this->fStartTimers[testIndex].reset(new TTimer());
-    this->fTestFn(fDevice, this);
-    this->fEndTimers[testIndex].reset(new TTimer());
+    if (fDevice->Error().empty())
+    {
+        this->fStartTimers[testIndex].reset(new TTimer());
+        this->fTestFn(fDevice, this);
+        this->fEndTimers[testIndex].reset(new TTimer());
+    }
     
     return fDevice->Error().empty();
 }
@@ -265,13 +274,13 @@ void TDevTest::PrintSummary(ostream& file) const
     {
         file << "*** RESULT: OK!" << endl;
         file << "*** " << endl;
-        file << "*** Total data size:         " << setw(10) << fixed << setprecision(0) << fBytesPerTest * fEndTimers.size() / 1024 << " kB" << endl;
+        file << "*** Total data size:         " << setw(10) << fixed << setprecision(0) << fBytesPerTest * fNRuns / 1024 << " kB" << endl;
     }
     else
     {
         file << "*** RESULT: ERROR!" << endl;
         file << "***"                << endl;
-        file << "*** Processed " << fDoneBytes << " of " << fBytesPerTest << " bytes" << endl; 
+        file << "*** Processed " << fDoneBytes << " of " << fBytesPerTest * fNRuns << " bytes" << endl; 
         file << "*** Device error: " << fDevError << endl;
     }
     file << "**********************************************"  << endl;
