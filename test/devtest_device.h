@@ -78,7 +78,6 @@ private:
     void*     fDevice;    /**< Device private context.                */
     pthread_t fReadReqThread;
     string    fError;
-    device_ioctrl_kbuf_info fKbufInfo;
     
     unsigned long fMmapBufSize;    
     vector<char*> fMmapBufs;

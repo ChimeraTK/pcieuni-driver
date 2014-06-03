@@ -1,3 +1,8 @@
+/**
+ *  @file   pciedev_drv.c
+ *  @brief  Implementation of driver operations           
+ */
+
 #include <linux/module.h>
 #include <linux/fs.h>	
 #include <linux/interrupt.h>
@@ -14,7 +19,11 @@ MODULE_DESCRIPTION("DESY AMC-PCIE board driver");
 MODULE_VERSION("2.0.0");
 MODULE_LICENSE("Dual BSD/GPL");
 
-static unsigned long  kbuf_blk_sz_kb = 256;
+
+/**
+ * @brief Module parameter - size of kernel buffers used for DMA transfer (in kB)  
+ */
+static unsigned long  kbuf_blk_sz_kb = 128;
 module_param(kbuf_blk_sz_kb, ulong, S_IRUGO);
 
 
@@ -104,7 +113,7 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
     result = pciedev_probe_exp(dev, id, &pciedev_fops, &pciedev_cdev_m, DEVNAME, &tmp_brd_num);
     printk(KERN_ALERT "PCIEDEV_PROBE_EXP CALLED  FOR BOARD %i\n", tmp_brd_num);
 
-    // if board has created we will create our structure and pass it to pcedev_dev
+    /*if board has created we will create our structure and pass it to pcedev_dev*/
     if(!result)
     {
         printk(KERN_ALERT "PCIEDEV_PROBE_EXP CREATING CURRENT STRUCTURE FOR BOARD %i\n", tmp_brd_num);
@@ -138,7 +147,7 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
      printk(KERN_ALERT "REMOVE CALLED FOR BOARD %i\n", tmp_brd_num);
      
      
-     // clean up any allocated resources and stuff here
+     /* clean up any allocated resources and stuff here */
      if (!IS_ERR_OR_NULL(module_dev_p[tmp_brd_num]))
      {
         pciedev_release_mdev(module_dev_p[tmp_brd_num]);

@@ -1,16 +1,20 @@
-#include <linux/types.h>
-#include <linux/timer.h>
+/**
+ *  @file   pciedev_fnc.c
+ *  @brief  Implementation of driver specific utility functions            
+ */
+
+#include <linux/sched.h>
 #include "pciedev_fnc.h"
 
 /**
- * @brief Allocates and initializes driver specific data for given pci device
+ * @brief Allocates and initializes driver specific part of pci device data
  * 
- * @param brd_num       device index in the list of probed devices
- * @param pcidev        target pci device structure
- * @param kbuf_blk_num  number of preallocated DMA buffers
- * @param kbuf_blk_size size of preallocated DMA buffers
+ * @param brd_num       Device index in the list of probed devices
+ * @param pcidev        Universal driver pci device structure
+ * @param kbuf_blk_num  Number of preallocated DMA buffers
+ * @param kbuf_blk_size Size of preallocated DMA buffers
  * 
- * @return  Allocated module_dev strucure
+ * @return  Allocated module_dev structure
  * @retval  -ENOMEM     Failed - could not allocate memory
  */
 module_dev* pciedev_create_mdev(int brd_num, pciedev_dev* pcidev, unsigned long bufferSize)
@@ -55,13 +59,20 @@ module_dev* pciedev_create_mdev(int brd_num, pciedev_dev* pcidev, unsigned long 
     return mdev;
 }
 
+/**
+ * @brief Releses driver specific part of pci device data
+ * @note This function may block (in case some DMA buffers are in use)
+ * 
+ * @param mdev   module_dev sructure to be released
+ * @return void
+ */
 void pciedev_release_mdev(module_dev* mdev)
 {
     PDEBUG(mdev->parent_dev->name, "pciedev_release_mdev()");
     
     if (!IS_ERR_OR_NULL(mdev))
     {
-        // clear the buffers (gracefully)
+        // clear the buffers gracefully
         pciedev_bufferList_clear(&mdev->dmaBuffers);
         
         // clear the module_dev structure
@@ -69,10 +80,90 @@ void pciedev_release_mdev(module_dev* mdev)
     }
 }
 
+/**
+ * @brief Returns driver specific part of pci device data
+ * 
+ * @param   dev     Universal driver pci device structure
+ * @return  module_dev structure
+ */
 module_dev* pciedev_get_mdev(struct pciedev_dev *dev)
 {
     struct module_dev *mdev = (struct module_dev*)(dev->dev_str);
     return mdev;
+}
+
+/**
+ * @brief Reserves DMA read process on target device
+ * 
+ * @note This function will block until device is ready to acceept DMA request. 
+ * 
+ * @param   mdev   PCI device 
+ * @param   buffer Target DMA buffer
+ * 
+ * @retval  0      Success
+ * @retval  -EINTR Operation was interrupted
+ * @retval  -EBUSY Operation timed out
+ */
+int pciedev_dma_reserve(module_dev* mdev, pciedev_buffer* buffer)
+{
+    long waitVal = 0;
+    long timeout = HZ/1;
+    
+    PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve()");
+   
+    // protect against concurrent reservation of waitFlag
+    if (down_interruptible(&mdev->dma_sem))
+    {
+        return -EINTR;
+    }
+    
+    while (!mdev->waitFlag)
+    {
+        // wait for DMA to be available
+        up(&mdev->dma_sem);
+        
+        PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Waiting until dma available...\n"); 
+        waitVal = wait_event_interruptible_timeout(mdev->waitDMA, mdev->waitFlag, timeout);
+        if (0 == waitVal)
+        {
+            PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Timeout!\n"); 
+            return -EBUSY; 
+        }
+        else if (0 > waitVal)
+        {
+            PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Interrupted!\n"); 
+            return -EINTR;
+        }
+        
+        // protect against concurrent reservation of waitFlag
+        if (down_interruptible(&mdev->dma_sem))
+        {
+            PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Interrupted!\n"); 
+            return -EINTR;
+        }        
+    }
+    
+    // Mark DMA read operation reserved and set the target buffer
+    mdev->waitFlag   = 0;
+    mdev->dma_buffer = buffer; 
+    up(&mdev->dma_sem);
+    
+    return 0;
+}
+
+/**
+ * @brief Releases DMA read process on target device
+ * 
+ * @note This function is called from interrupt handler so it must not block.
+ * 
+ * @param mdev  Driver device structure
+ */
+void pciedev_dma_release(module_dev* mdev)
+{
+    PDEBUG(mdev->parent_dev->name, "pciedev_dma_release()");
+    mdev->waitFlag   = 1;
+    mdev->dma_buffer = 0; 
+    wake_up_interruptible(&(mdev->waitDMA));
 }
 
 
