@@ -1,9 +1,16 @@
+/**
+ *  @file   devtest_timer.cpp
+ *  @brief  Implementation of TTimer class 
+ */
+
 #include "devtest_timer.h"
-//#include <linux/time.h>
 #include <sys/time.h>
 #include <time.h>
 #include <sys/resource.h>
 
+/**
+ * @brief Constructor - automatically takes timestamp at creation time. 
+ */
 TTimer::TTimer()
 {
     struct timespec tmp;
@@ -21,6 +28,12 @@ TTimer::TTimer()
     
 }
 
+/**
+ * @brief Subtracts two timestamps - the resulting timestamp contains time difference
+ * 
+ * @param other     The other timestamp (should be earlier than this one)
+ * @return          Time difference between the two timestamps
+ */
 TTimer TTimer::operator-(const TTimer& other)
 {
     TTimer result;

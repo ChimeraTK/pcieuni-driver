@@ -11,6 +11,17 @@
 #include <math.h>
 #include "devtest_test.h"
 
+/**
+ * @brief Initialize before test-run.
+ * 
+ * @param testName      Test name as is displayed in UI
+ * @param testFn        Test operation to be executed
+ * @param startOffset   DMA offset to read from
+ * @param bytesPerTest  Number of bytes to transfer per read 
+ * @param nRuns         Number of test runs 
+ * @param runIntervalUs ime interval between consecutive test runs (in microseconds)
+ * @return void
+ */
 void TTest::Init(const std::string& testName, TFn* testFn, long startOffset, long bytesPerTest, int nRuns, long runIntervalUs)
 {
     fTestName      = testName;
@@ -23,6 +34,13 @@ void TTest::Init(const std::string& testName, TFn* testFn, long startOffset, lon
     fEndTimers.resize(nRuns);
 }
 
+/**
+ * @brief Run the test
+ * 
+ * @param devices   List of devices to run the test on
+ * @param silent    When true test headers and results will not be printed - useful to produce single output for many tests
+ * @return void
+ */
 void TTest::Run(vector<shared_ptr<IDevice> > &devices, bool silent)
 {
     // Prepare list of per-device tests
@@ -65,6 +83,14 @@ void TTest::Run(vector<shared_ptr<IDevice> > &devices, bool silent)
         {
             usleep(this->fRunIntervalUs - us);
         }
+        
+        if (!silent && (i>=500))
+        {
+            if ((i%100) == 0)
+            {
+                cout << fixed << setprecision(2) << "Done: " << (500.0 * i)/this->fNRuns << " %" << endl;
+            }
+        }
     }
 
     // Take testing-end timestamp    
@@ -74,12 +100,24 @@ void TTest::Run(vector<shared_ptr<IDevice> > &devices, bool silent)
     if (!silent) this->PrintSummary(cout);
 }
 
+/**
+ * @brief Returns target buffer that data is read into
+ * 
+ * @param devTest   Return buffer for this device (index)
+ * @return  The buffer
+ */
 vector<char>& TTest::Buffer(int devTest)
 {
     return fDevTests[devTest]->Buffer();
 }
 
 
+/**
+ * @brief   Print test header
+ * 
+ * @param   Target stream 
+ * @return void
+ */
 void TTest::PrintHead(ostream& file)
 {
     file << endl << endl << endl;
@@ -97,6 +135,11 @@ void TTest::PrintHead(ostream& file)
     file << "**********************************************" << endl;
 }
 
+/**
+ * @brief Returns true if no error occured during testing on any device
+ * 
+ * @return bool
+ */
 bool TTest::StatusOK()
 {
     bool statusOK(true);
@@ -109,7 +152,12 @@ bool TTest::StatusOK()
     return statusOK;
 }
 
-// TODO: handle case of only one device
+/**
+ * @brief Print test results summary
+ * 
+ * @param file Target stream
+ * @return void
+ */
 void TTest::PrintSummary(ostream& file)
 {
     file << endl; 
@@ -143,7 +191,13 @@ void TTest::PrintSummary(ostream& file)
     }
 }    
 
-// TODO: handle case of only one device
+/**
+ * @brief Print test performance results, averages and error estimation
+ * 
+ * @param file          Target stream
+ * @param printHeader   Set to false to skip header line - useful to print results of multiple tests into single table
+ * @return void
+ */
 void TTest::PrintStat(ostream& file, bool printHeader)
 {
     if (printHeader)
@@ -232,6 +286,16 @@ void TTest::PrintStat(ostream& file, bool printHeader)
 /*****************************************************************************************************/
 /*****************************************************************************************************/
 
+/**
+ * @brief Constructor
+ * 
+ * @param testName      Test name as is displayed in UI
+ * @param device        Target device
+ * @param testFn        Test operation to be executed
+ * @param startOffset   DMA offset to read from
+ * @param bytesPerTest  Number of bytes to transfer per read 
+ * @param nRuns         Number of test runs 
+ */
 TDevTest::TDevTest(string testName, IDevice* device, TFn* testFn, long startOffset, long bytesPerTest, int nRuns)
 {
     fTestName = testName;
@@ -249,6 +313,13 @@ TDevTest::TDevTest(string testName, IDevice* device, TFn* testFn, long startOffs
     device->ResetStatus();
 }
 
+/**
+ * @brief Run the test
+ * 
+ * @param testIndex     Index of test run
+ * @retval true     Test run OK
+ * @retval false    Test failed
+ */
 bool TDevTest::Run(int testIndex)
 {
     if (fDevice->Error().empty())
@@ -262,16 +333,32 @@ bool TDevTest::Run(int testIndex)
 }
 
 
+/**
+ * @brief Target buffer that data is read into
+ * 
+ * @return The buffer
+ */
 vector<char>& TDevTest::Buffer()
 {
     return fBuffer;
 }
 
+/**
+ * @brief Target device
+ * 
+ * @return IDevice*
+ */
 IDevice* TDevTest::Device() const
 {
     return fDevice;
 }
 
+/**
+ * @brief Print test results summary for single device
+ * 
+ * @param file Target stream
+ * @return void
+ */
 void TDevTest::PrintSummary(ostream& file) const
 {
     file << "*** Device "  << fDevice->Name() << endl;
@@ -293,6 +380,12 @@ void TDevTest::PrintSummary(ostream& file) const
     file << "**********************************************"  << endl;
 }    
 
+/**
+ * @brief Print test performance results, averages and error estimation for single device
+ * 
+ * @param file          Target stream
+ * @return void
+ */
 void TDevTest::PrintStat(ostream& file) const
 {
     if (this->StatusOK())
@@ -354,12 +447,24 @@ void TDevTest::PrintStat(ostream& file) const
     }
 }    
 
+/**
+ * @brief Update test status after test procedure run
+ * 
+ * @param newBytesRead      How many bytes was just read
+ * @param error             Which error is reported on device
+ * @return void
+ */
 void TDevTest::UpdateStatus(long newBytesRead, string error)
 {
     fDoneBytes += newBytesRead;
     if (!error.empty()) fDevError.append(error); 
 }
 
+/**
+ * @brief Returns true if no errors happened on the target device
+ * 
+ * @return bool
+ */
 bool TDevTest::StatusOK() const
 {
     return (fDoneBytes == fBytesPerTest * fNRuns) && fDevError.empty();

@@ -45,7 +45,7 @@ enum TMainMenuOption
     
     MAIN_MENU_DMA_READ_PERFORMANCE_REPORT,      /**< Run all the above performance tests and produce common output  */
 
-    MAIN_MENU_DMA_READ_STRESS_TEST              /**< Make continuous 1MB reads 3.000.000 times per device (should take close to 1 hour) */   
+    MAIN_MENU_DMA_READ_STRESS_TEST              /**< Make continuous 1MB reads 5.000.000 times per device (takes several hours) */   
 };
 
 /**
@@ -74,6 +74,8 @@ TMainMenuOption GetMainMenuChoice()
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_PERFORMANCE_16MB_10HZ,  "Performance test (10Hz): DMA read 16MB"));
     
     options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_PERFORMANCE_REPORT,     "Performance report (run all performance tests)."));
+
+    options.insert(pair<TMainMenuOption, string>(MAIN_MENU_DMA_READ_STRESS_TEST,            "Stress test:Run 1MB DMA read 5.000.000 times (takes hours!)"));
     
     cout << endl << endl << endl;
     cout << "********** Main Menu **********" << endl;
@@ -618,6 +620,10 @@ int main(int argc, char *argv[])
                 testLog.PrintStat(cout, false);                
                 break;
                 
+            case MAIN_MENU_DMA_READ_STRESS_TEST:
+                testLog.Init("DMA read stress test", &TestKringDmaRead, 0, 1024*1024, 5000000, 0);
+                testLog.Run(devices);
+                testLog.PrintStat(cout);
                 
             default:
                 cout << "ERROR! You have selected an invalid choice.";

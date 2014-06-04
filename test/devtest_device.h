@@ -1,5 +1,5 @@
 /**
- *  @file   devtest_device.cpp
+ *  @file   devtest_device.h
  *  @brief  Declaration of device classes           
  */
 
@@ -131,7 +131,7 @@ private:
 };
 
 /**
- * @brief Implements interfaace to actual device functionality
+ * @brief Implements interface to PCI device
  * 
  */
 class TDevice : public IDevice
