@@ -1,3 +1,8 @@
+/**
+ *  @file   devtest_main.cpp
+ *  @brief  User interface implementation           
+ */
+
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -14,29 +19,40 @@
 using namespace std;
 
 
+/**
+ * @brief Enum of menu options
+ * 
+ */
 enum TMainMenuOption
 {
-    MAIN_MENU_INVALID  = -1,
+    MAIN_MENU_INVALID  = -1,                    /**< Invalid choice */
     
-    MAIN_MENU_EXIT,
+    MAIN_MENU_EXIT,                             /**< Exit */
     
-    MAIN_MENU_ALL_BOARDS_SETUP,
-    MAIN_MENU_ALL_BOARDS_RESET,
+    MAIN_MENU_ALL_BOARDS_SETUP,                 /**< Setup all devices for DMA - this will probably set more device registers than necessary... but it works. */
+    MAIN_MENU_ALL_BOARDS_RESET,                 /**< Set reset bit on all devices - effect unknown... */
     
-    MAIN_MENU_REG_WRITE_32,
-    MAIN_MENU_REG_READ,
-    MAIN_MENU_DMA_READ_SINGLE,
+    MAIN_MENU_REG_WRITE_32,                     /**< Write data to device register */
+    MAIN_MENU_REG_READ,                         /**< Read data from device register */
+    MAIN_MENU_DMA_READ_SINGLE,                  /**< Execute single DMA read operation  */
 
-    MAIN_MENU_DMA_READ_PERFORMANCE_512KB,
-    MAIN_MENU_DMA_READ_PERFORMANCE_1MB,
-    MAIN_MENU_DMA_READ_PERFORMANCE_16MB,
-    MAIN_MENU_DMA_READ_PERFORMANCE_512KB_10HZ,
-    MAIN_MENU_DMA_READ_PERFORMANCE_1MB_10HZ,
-    MAIN_MENU_DMA_READ_PERFORMANCE_16MB_10HZ,
+    MAIN_MENU_DMA_READ_PERFORMANCE_512KB,       /**< Measure performance of 512kB DMA read (1000 continuous reads per device)  */
+    MAIN_MENU_DMA_READ_PERFORMANCE_1MB,         /**< Measure performance of 1MB DMA read (1000 continuous reads per device)  */    
+    MAIN_MENU_DMA_READ_PERFORMANCE_16MB,        /**< Measure performance of 16MB DMA read (1000 continuous reads per device)  */
+    MAIN_MENU_DMA_READ_PERFORMANCE_512KB_10HZ,  /**< Measure performance of 512kB DMA read (1000 reads per device at 10HZ rate)  */
+    MAIN_MENU_DMA_READ_PERFORMANCE_1MB_10HZ,    /**< Measure performance of 1MB DMA read (1000 reads per device at 10HZ rate)  */
+    MAIN_MENU_DMA_READ_PERFORMANCE_16MB_10HZ,   /**< Measure performance of 16MB DMA read (1000 reads per device at 10HZ rate)  */
     
-    MAIN_MENU_DMA_READ_PERFORMANCE_REPORT,
+    MAIN_MENU_DMA_READ_PERFORMANCE_REPORT,      /**< Run all the above performance tests and produce common output  */
+
+    MAIN_MENU_DMA_READ_STRESS_TEST              /**< Make continuous 1MB reads 3.000.000 times per device (should take close to 1 hour) */   
 };
 
+/**
+ * @brief Ask user for main menu choice
+ * 
+ * @return TMainMenuOption
+ */
 TMainMenuOption GetMainMenuChoice()
 {
     map<TMainMenuOption, string> options;
@@ -77,13 +93,19 @@ TMainMenuOption GetMainMenuChoice()
     return iter == options.end() ? MAIN_MENU_INVALID : iter->first;
 }
 
-IDevice* GetDeviceChoice(vector<unique_ptr<IDevice> >& devices)
+/**
+ * @brief Ask user for target device choice
+ * 
+ * @param devices List of available devices
+ * @return IDevice*
+ */
+shared_ptr<IDevice> GetDeviceChoice(vector<shared_ptr<IDevice> >& devices)
 {
     unsigned int choice = 0;
 
     if (devices.size() == 1)
     {
-        return devices[0].get();
+        return devices[0];
     }
     
     while ((choice <= 0) || (choice > devices.size()))
@@ -97,10 +119,15 @@ IDevice* GetDeviceChoice(vector<unique_ptr<IDevice> >& devices)
         cin >> choice;
     }
 
-    return devices[choice-1].get();
+    return devices[choice-1];
 }
 
 
+/**
+ * @brief Ask user for target bar choice
+ * 
+ * @return int
+ */
 int GetBarChoice()
 {
     cout << "**** Device BARx (0..5):" ;
@@ -109,6 +136,11 @@ int GetBarChoice()
     return choice;
 }
 
+/**
+ * @brief Ask user for offset choice
+ * 
+ * @return int
+ */
 int GetOffsetChoice()
 {
     cout << "**** Device offset (hex):" ;
@@ -118,6 +150,11 @@ int GetOffsetChoice()
     return choice;
 }
 
+/**
+ * @brief Ask user to enter 32 bit register value
+ * 
+ * @return 32 bit value
+ */
 vector<unsigned char> GetData32()
 {
     cout << "**** Data to write:";
@@ -135,6 +172,12 @@ vector<unsigned char> GetData32()
     return bytes;
 }
 
+/**
+ * @brief Ask user to enter data size
+ * 
+ * @return int
+ */
+
 int GetTotalBytesChoice()
 {
     cout << "**** Size of transfer (kB):" ;
@@ -144,15 +187,12 @@ int GetTotalBytesChoice()
     return choice*1024;
 }
 
-int GetBlockBytesChoice()
-{
-    cout << "**** Size of transfer block (kB):" ;
-    int choice(0);
-    cin >> choice;
-    if (choice <= 0) choice = 4;
-    return choice*1024;    
-}
-
+/**
+ * @brief Output buffer contents
+ * 
+ * @param buffer The buffer
+ * @return void
+ */
 void DumpBuffer(vector<char>& buffer)
 {
     int analyse(1);
@@ -244,6 +284,13 @@ void DumpBuffer(vector<char>& buffer)
 }
 
 
+/**
+ * @brief Execute DMA read on device and update the corresponding TDevTest structure
+ * 
+ * @param device  target device 
+ * @param test    target devTest structure
+ * @return void
+ */
 void TestKringDmaRead(IDevice* device, TDevTest* test)
 {
     int code = 0;
@@ -257,6 +304,15 @@ void TestKringDmaRead(IDevice* device, TDevTest* test)
     test->UpdateStatus(code ? 0 : test->fBytesPerTest, device->Error());
 }
 
+/**
+ * @brief Write 1 byte to device register
+ * 
+ * @param device    Target device
+ * @param bar       BAR number
+ * @param offset    Register offset within BAR
+ * @param data      Data to write
+ * @return void
+ */
 void WriteByteReg(IDevice* device, int bar, long offset, unsigned int data)
 {
     cout << "*** Writing " << hex << setw(2) << setfill('0') << data << " to bar " << bar << " offset " << offset << dec << endl; 
@@ -266,6 +322,15 @@ void WriteByteReg(IDevice* device, int bar, long offset, unsigned int data)
     }
 }
 
+/**
+ * @brief Write 4 bytes to device register
+ * 
+ * @param device    Target device
+ * @param bar       BAR number
+ * @param offset    Register offset within BAR
+ * @param data      Data to write
+ * @return void
+ */
 void WriteWordReg(IDevice* device, int bar, long offset, unsigned int data)
 {
     cout << "*** Writing " << hex << setw(8) << setfill('0') << data << " to bar " << bar << " offset " << offset << dec << endl; 
@@ -275,9 +340,23 @@ void WriteWordReg(IDevice* device, int bar, long offset, unsigned int data)
     }
 }
 
+/**
+ * @brief Main
+ * 
+ * Must be started with at least one target device file as parameter
+ *
+ * Usage:
+ * @code
+ *      devtest   <character device file 1> <character device file 2> <character device file 3> ...
+ * @endcode
+ * 
+ * @param argc 
+ * @param argv 
+ * @return int
+ */
 int main(int argc, char *argv[])
 {
-    vector<unique_ptr<IDevice> > devices;
+    vector<shared_ptr<IDevice> > devices;
     
     if (argc < 2)
     {
@@ -292,13 +371,13 @@ int main(int argc, char *argv[])
     for (int i = 1; i<argc; i++)
     {
 #ifdef MOCK_DEVICES
-        devices.push_back(unique_ptr<IDevice>(new TDeviceMock(argv[i])));
+        devices.push_back(shared_ptr<IDevice>(new TDeviceMock(argv[i])));
 #else
-        devices.push_back(unique_ptr<IDevice>(new TDevice(argv[i])));
+        devices.push_back(shared_ptr<IDevice>(new TDevice(argv[i])));
 #endif 
     }
     
-    for (std::vector<unique_ptr<IDevice> >::iterator iDevice = devices.begin(); iDevice != devices.end(); ++iDevice)
+    for (std::vector<shared_ptr<IDevice> >::iterator iDevice = devices.begin(); iDevice != devices.end(); ++iDevice)
     {
         if (!(*iDevice)->StatusOk())
         {
@@ -324,7 +403,7 @@ int main(int argc, char *argv[])
             
             case MAIN_MENU_ALL_BOARDS_SETUP:
             {   
-                for (std::vector<unique_ptr<IDevice> >::iterator iDevice = devices.begin(); iDevice != devices.end(); ++iDevice)
+                for (std::vector<shared_ptr<IDevice> >::iterator iDevice = devices.begin(); iDevice != devices.end(); ++iDevice)
                 {
                     IDevice* device = iDevice->get();
                     
@@ -399,7 +478,7 @@ int main(int argc, char *argv[])
 
             case MAIN_MENU_ALL_BOARDS_RESET:
             {   
-                for (std::vector<unique_ptr<IDevice> >::iterator iDevice = devices.begin(); iDevice != devices.end(); ++iDevice)
+                for (std::vector<shared_ptr<IDevice> >::iterator iDevice = devices.begin(); iDevice != devices.end(); ++iDevice)
                 {
                     IDevice* device = iDevice->get();
                     unsigned int word_reset_n = 0x200;  // bar 0        
@@ -414,7 +493,7 @@ int main(int argc, char *argv[])
             case MAIN_MENU_REG_WRITE_32:
             {   
                 cout << "******** Write to device register ************"  << endl;
-                IDevice* device = GetDeviceChoice(devices);
+                shared_ptr<IDevice> device = GetDeviceChoice(devices);
                 int bar     = GetBarChoice();
                 long offset = GetOffsetChoice();
                 vector<unsigned char> data = GetData32();
@@ -436,7 +515,7 @@ int main(int argc, char *argv[])
             case MAIN_MENU_REG_READ:
             {
                 cout << "******** Read from device register ***********"  << endl;
-                IDevice* device = GetDeviceChoice(devices);
+                shared_ptr<IDevice> device = GetDeviceChoice(devices);
                 int bar     = GetBarChoice();
                 long offset = GetOffsetChoice();
                 vector<unsigned char> data;
@@ -464,8 +543,8 @@ int main(int argc, char *argv[])
             
             case MAIN_MENU_DMA_READ_SINGLE:
             {
-                vector<unique_ptr<IDevice> > tgtDevices(1);
-                tgtDevices[0].reset(GetDeviceChoice(devices));
+                vector<shared_ptr<IDevice> > tgtDevices(1);
+                tgtDevices[0] = GetDeviceChoice(devices);
                 long offset = GetOffsetChoice();
                 long bytes  = GetTotalBytesChoice();
                 

@@ -1,4 +1,12 @@
+/**
+ *  @file   devtest_test.cpp
+ *  @brief  Declaration of test classes
+ *
+ *  Test classes run operations on device and collect test results           
+ */
+
 #ifndef DEVTEST_TEST
+
 #define DEVTEST_TEST
 
 #include <vector>
@@ -10,7 +18,22 @@ using namespace std;
 
 class TTest;
 class TDevTest;
+
+
+/**
+ * @brief Executes test operation on device
+ * 
+ * @param device    Device to be tested 
+ * @param test      Test worker/reporter class
+ */
 typedef void (TFn)(IDevice* device, TDevTest* test);
+
+/**
+ * @brief Implements main test worker and reporter class
+ * 
+ * TTest runs testing procedure on series of target devices and collects performance results.
+ * It also provides functions to print the results on screen.
+ */
 
 class TTest
 {
@@ -28,7 +51,7 @@ public:
     vector<unique_ptr<TDevTest> > fDevTests;
     
     void Init(const std::string& testName, TFn* testFn, long startOffset, long bytesPerTest, int nRuns, long runIntervalUs);
-    void Run(vector<unique_ptr<IDevice> > &devices, bool silent = false);
+    void Run(vector<shared_ptr<IDevice> > &devices, bool silent = false);
     vector<char>& Buffer(int devTest);
     void PrintHead(ostream& file);
     bool StatusOK();    

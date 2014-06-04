@@ -1,3 +1,10 @@
+/**
+ *  @file   devtest_test.cpp
+ *  @brief  Implementation of test classes
+ *
+ *  Test classes run operations on device and collect test results           
+ */
+
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -16,7 +23,7 @@ void TTest::Init(const std::string& testName, TFn* testFn, long startOffset, lon
     fEndTimers.resize(nRuns);
 }
 
-void TTest::Run(vector<unique_ptr<IDevice> > &devices, bool silent)
+void TTest::Run(vector<shared_ptr<IDevice> > &devices, bool silent)
 {
     // Prepare list of per-device tests
     fDevTests.resize(devices.size());
@@ -24,7 +31,7 @@ void TTest::Run(vector<unique_ptr<IDevice> > &devices, bool silent)
     {
         fDevTests[i].reset(new TDevTest(fTestName, devices[i].get(), fTestFn, fStartOffset, fBytesPerTest, fNRuns));
     }
-
+    
     // print test header
     if (!silent) this->PrintHead(cout);
 

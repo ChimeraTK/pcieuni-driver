@@ -1,3 +1,8 @@
+/**
+ *  @file   devtest_device.cpp
+ *  @brief  Implementation of TDevice class           
+ */
+
 #include <fcntl.h>
 #include "devtest_device.h"
 #include <sys/ioctl.h>
@@ -8,6 +13,13 @@
 #include <iomanip>
 #include <vector>
 
+/**
+ * @brief Dump buffer contents to standard output
+ * 
+ * @param tgtBuffer Buffer 
+ * @param size      Size of data to dump
+ * @return void
+ */
 void hex_dump(void* tgtBuffer, int size)
 {
     cout << hex;
@@ -20,6 +32,11 @@ void hex_dump(void* tgtBuffer, int size)
     cout << dec << endl;
 }
 
+/**
+ * @brief Constructor
+ * 
+ * @param deviceFile Target device file
+ */
 TDevice::TDevice(string deviceFile)
     : fFile(deviceFile)
 {
@@ -30,11 +47,6 @@ TDevice::TDevice(string deviceFile)
         stringStream << "open() ERROR! errno = " << errno << " (" << strerror(errno) << ")"; 
         this->fError = stringStream.str();
     }
-}
-
-int TDevice::Handle() const
-{ 
-    return fHandle; 
 }
 
 string TDevice::Name() const
@@ -57,6 +69,17 @@ void TDevice::ResetStatus()
     fError.clear();
 }
 
+/**
+ * @brief Write to PCI device register
+ * 
+ * @param bar       Traget BAR number
+ * @param offset    Register offset within BAR
+ * @param data      Data to write
+ * @param dataSize  Size of data 
+ * 
+ * @retval 0 Success      
+ * @retval 1 Failure      
+ */
 int TDevice::RegWrite(int bar, long offset, unsigned int data, long dataSize)
 {
     struct device_rw rw;
@@ -96,6 +119,17 @@ int TDevice::RegWrite(int bar, long offset, unsigned int data, long dataSize)
     return 0;
 }
 
+/**
+ * @brief Read from PCI device register
+ * 
+ * @param bar       Source BAR number
+ * @param offset    Register offset within BAR
+ * @param data      Target buffer
+ * @param dataSize  Size of data 
+ * 
+ * @retval 0 Success      
+ * @retval 1 Failure      
+ */
 int TDevice::RegRead(int bar, long offset, unsigned char* data, long dataSize)
 {
     struct device_rw rw;
@@ -120,11 +154,30 @@ int TDevice::RegRead(int bar, long offset, unsigned char* data, long dataSize)
     return 0;
 }
 
+/**
+ * @brief Read from device using DMA read IOCTL
+ * 
+ * @param dma_rw    DMA read request
+ * @param buffer    Target buffer
+ * 
+ * @retval 0  Success
+ * @retval <0 Error number
+ */
 int TDevice::KringReadDma(device_ioctrl_dma& dma_rw, char* buffer)
 {
     return this->Ioctl(PCIEDEV_READ_DMA, &dma_rw, buffer);
 }
 
+/**
+ * @brief Executes DMA IOCTL on device
+ * 
+ * @param req       IOCTL command
+ * @param dma_rw    DMA request
+ * @param tgtBuffer Target buffer
+ * 
+ * @retval 0  Success
+ * @retval <0 Error number
+ */
 int TDevice::Ioctl(long unsigned int req, device_ioctrl_dma* dma_rw, char* tgtBuffer)
 {
     int code = 0;
