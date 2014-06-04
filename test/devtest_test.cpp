@@ -86,9 +86,9 @@ void TTest::Run(vector<shared_ptr<IDevice> > &devices, bool silent)
         
         if (!silent && (i>=500))
         {
-            if ((i%100) == 0)
+            if ((i%500) == 0)
             {
-                cout << fixed << setprecision(2) << "Done: " << (500.0 * i)/this->fNRuns << " %" << endl;
+                cout << fixed << setprecision(2) << "Done: " << (100.0 * i)/this->fNRuns << " %" << endl;
             }
         }
     }
