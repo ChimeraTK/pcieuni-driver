@@ -1,0 +1,63 @@
+/**
+@mainpage PCI device test tool documentation
+This PCI device test tool was written to measure performance of different DMA read methods implemented in the 
+DESY PCIe Device Driver (pciedev). As all but one method were obsoleted in the driver, this test tool also now 
+only tests one method, but could be easily extedned to support additional tests.
+
+User can specify multiple target devices to test with. When multiple devices are provided most tests will execute
+each operation on every device. 
+@note Tests operations are run on test devices one after another, not in parallel. Running in parallel is currently 
+      not supported, although the required extension should be easy to implement.   
+
+@section Running
+    Target device(s) need to be passed as parameter(s) in the command line.
+
+    Usage:
+    @code
+        devtest <device file1> <device file12> <device file3> ... 
+    @endcode
+
+@section Functionality
+The tool features simple text-based user interface, where user can choose between options defined in the 
+::TMainMenuOption enumeration. The following functionalities are implemented:
+
+    @subsection setup-boards Setup boards for DMA 
+    Use this option prior to any other testing. This will execute a series of writes on the target PCI devices, which
+    should set up the hardware to be ready for DMA. We blindly make all the register writes as we recived in 
+    instructions from the firmware-development team. We did not analyse if all of these are required, but they do 
+    appear to be sufficient. 
+    @note If one runs performance tests on a board that was not set up by this procedure, the performance results will 
+          be strange, but the tests won't report any error. This is because DMA will always fail in some constant time,
+          but current firmware implementation offers no way to provide this information to the driver. So instead of 
+          test failure we'll just get bad (usually - depending on the size of driver buffers) performance.
+
+    @subsection reg-io Register read&write 
+    With this option one can write and read to chosen BAR registers on target device.
+
+    @subsection read-single Single DMA read & dump buffer
+    With this option one can read via DMA desired amount of data from chosen offset on target device. Afterwards 
+    sections of data can be dumped to screen.
+
+    @subsection performance-tests Performance tests
+    There are several preconfigured performance tests offered in the menu. These tests are chosen to simulate the expected 
+    real-life use cases. The tests will measure performance of 0.5MB, 1MB and 16MB read. Each read is repeated 1000 times on 
+    every device, and the final performance results are averaged over all the runs for each device. There are two varitions
+    of performance testing - continuous test execution and execution at 10Hz rate. The latter is expected to better fit the 
+    real life scenario. It results in significanly lower CPU usage, of course, but also slightly lower transfer speeds. This
+    is most likely because the kernel swaps out the test-process as it is idle waiting for the next test run.  
+    
+    In perfomance test several quantities are observed and reported in the end:
+    - Wall clock time
+    - Cpu time used by the process
+    - User space cpu time used by process
+    - Kernel space cpu time used by process
+    From these average CPU usage and transfer speed are calculated.
+
+    @subsection performance-report Performance report 
+    This option runs all the preconfigured performance tests and produces output in a single table suitable for copying into 
+    a spreadsheet.
+
+    @subsection stress-test Stress test 
+    Reads 1MB from every device 3000000 times. This may take a couple of hours. The idea is to detect possible leak of 
+    resources.
+*/

@@ -1,61 +1,96 @@
+/**
+ *  @file   pciedev_drv.c
+ *  @brief  Implementation of driver operations           
+ */
+
 #include <linux/module.h>
 #include <linux/fs.h>	
 #include <linux/interrupt.h>
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/timer.h>
+#include <linux/mm.h>
 
 #include "pciedev_fnc.h"
+#include "pciedev_buffer.h"
 
 MODULE_AUTHOR("Ludwig Petrosyan");
 MODULE_DESCRIPTION("DESY AMC-PCIE board driver");
 MODULE_VERSION("2.0.0");
 MODULE_LICENSE("Dual BSD/GPL");
 
+
+/**
+ * @brief Module parameter - size of kernel buffers used for DMA transfer (in kB)  
+ */
+static unsigned long  kbuf_blk_sz_kb = 128;
+module_param(kbuf_blk_sz_kb, ulong, S_IRUGO);
+
+
 pciedev_cdev     *pciedev_cdev_m = 0;
 //pciedev_dev       *pciedev_dev_m   = 0;
 module_dev       *module_dev_p[PCIEDEV_NR_DEVS];
-module_dev       *module_dev_pp;
 
-static int        pciedev_open( struct inode *inode, struct file *filp );
-static int        pciedev_release(struct inode *inode, struct file *filp);
+static int     pciedev_open( struct inode *inode, struct file *filp );
+static int     pciedev_release(struct inode *inode, struct file *filp);
 static ssize_t pciedev_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos);
 static ssize_t pciedev_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos);
-static long     pciedev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+static long    pciedev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 
 struct file_operations pciedev_fops = {
-    .owner                  =  THIS_MODULE,
-    .read                     =  pciedev_read,
-    .write                    =  pciedev_write,
-    .unlocked_ioctl    =  pciedev_ioctl,
-    .open                    =  pciedev_open,
-    .release                =  pciedev_release,
+    .owner              =  THIS_MODULE,
+    .read               =  pciedev_read,
+    .write              =  pciedev_write,
+    .unlocked_ioctl     =  pciedev_ioctl,
+    .open               =  pciedev_open,
+    .release            =  pciedev_release,
 };
 
 static struct pci_device_id pciedev_ids[]  = {
-    { PCIEDEV_VENDOR_ID, PCIEDEV_DEVICE_ID,
-                   PCIEDEV_SUBVENDOR_ID, PCIEDEV_SUBDEVICE_ID, 0, 0, 0},
+    { PCIEDEV_VENDOR_ID, PCIEDEV_DEVICE_ID, PCIEDEV_SUBVENDOR_ID, PCIEDEV_SUBDEVICE_ID, 0, 0, 0},
+    // TODO: this was added so that driver would bind to the test-firmware. Should probably remove it or ask for complete list of supported device IDs
+    { PCIEDEV_VENDOR_ID, 0x0037,            PCIEDEV_SUBVENDOR_ID, PCIEDEV_SUBDEVICE_ID, 0, 0, 0},     
     { 0, }
 };
 MODULE_DEVICE_TABLE(pci, pciedev_ids);
 
-/*
- * The top-half interrupt handler.
+/**
+ * @brief The top-half interrupt handler.
+ * 
+ * @param irq       Interrupt number
+ * @param dev_id    Device 
+ * 
+ * @retval IRQ_HANDLED  Interrupt handled
+ * @retval IRQ_NONE     Interrupt was not from this device 
  */
+
 #if LINUX_VERSION_CODE < 0x20613 // irq_handler_t has changed in 2.6.19
 static irqreturn_t sis8300_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #else
 static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
 #endif
 {
-    uint32_t intreg = 0;
+    struct pciedev_dev *dev = (pciedev_dev*)dev_id;
+    struct module_dev *mdev = pciedev_get_mdev(dev);
     
-    struct pciedev_dev *pdev   = (pciedev_dev*)dev_id;
-    struct module_dev *dev     = (module_dev *)(pdev->dev_str);
+    PDEBUG(dev->name, "pciedev_interrupt(irq=%i)\n", irq);
     
-    //printk(KERN_ALERT "PCIEDEV_INTERRUPT:   DMA IRQ\n");
-    dev->waitFlag = 1;
-    wake_up_interruptible(&(dev->waitDMA));
+    if (!mdev->dma_buffer || !test_bit(BUFFER_STATE_WAITING, &mdev->dma_buffer->state))
+    {
+        // We did not expect this interrupt
+        PDEBUG(dev->name, "pciedev_interrupt(irq=%i): Got unexpected IRQ!\n", irq); 
+        return IRQ_NONE; 
+    }
+  
+    PDEBUG(dev->name,"pciedev_interrupt(irq=%i): DMA finished (offset=0x%lx, size=0x%lx)\n", irq, mdev->dma_buffer->dma_offset, mdev->dma_buffer->dma_size);
+  
+#ifdef PCIEDEV_TEST_MISSING_INTERRUPT
+    TEST_RANDOM_EXIT(100, "PCIEDEV: Simulating missing interrupt!", IRQ_NONE)
+#endif
+  
+    clear_bit(BUFFER_STATE_WAITING, &mdev->dma_buffer->state);
+    pciedev_dma_release(mdev);
+    
     return IRQ_HANDLED;
 }
 
@@ -65,24 +100,30 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
     static int __devinit pciedev_probe(struct pci_dev *dev, const struct pci_device_id *id)
 #endif
 {  
-    int result               = 0;
+    int result      = 0;
     int tmp_brd_num = -1;
     
     printk(KERN_ALERT "PCIEDEV_PROBE CALLED \n");
     result = pciedev_probe_exp(dev, id, &pciedev_fops, &pciedev_cdev_m, DEVNAME, &tmp_brd_num);
     printk(KERN_ALERT "PCIEDEV_PROBE_EXP CALLED  FOR BOARD %i\n", tmp_brd_num);
+
     /*if board has created we will create our structure and pass it to pcedev_dev*/
-    if(!result){
+    if(!result)
+    {
         printk(KERN_ALERT "PCIEDEV_PROBE_EXP CREATING CURRENT STRUCTURE FOR BOARD %i\n", tmp_brd_num);
-        module_dev_pp = kzalloc(sizeof(module_dev), GFP_KERNEL);
-        if(!module_dev_pp){
-                return -ENOMEM;
+        module_dev_p[tmp_brd_num] = pciedev_create_mdev(tmp_brd_num, pciedev_cdev_m->pciedev_dev_m[tmp_brd_num], kbuf_blk_sz_kb * 1024);
+        
+        if (IS_ERR(module_dev_p[tmp_brd_num]))
+        {
+            result = PTR_ERR(module_dev_p[tmp_brd_num]);
+            printk(KERN_ERR "PCIEDEV_PROBE Failed to allocte device driver structures for board %i (errno=%i)\n", tmp_brd_num, result);
+            
+            pciedev_remove_exp(dev,  &pciedev_cdev_m, DEVNAME, &tmp_brd_num);
+            printk(KERN_ALERT "PCIEDEV_REMOVE_EXP CALLED  FOR SLOT %i\n", tmp_brd_num);
+            return result;
         }
         printk(KERN_ALERT "PCIEDEV_PROBE CALLED; CURRENT STRUCTURE CREATED \n");
-        module_dev_p[tmp_brd_num] = module_dev_pp;
-        module_dev_pp->brd_num      = tmp_brd_num;
-        module_dev_pp->parent_dev  = pciedev_cdev_m->pciedev_dev_m[tmp_brd_num];
-        init_waitqueue_head(&module_dev_pp->waitDMA);
+        
         pciedev_set_drvdata(pciedev_cdev_m->pciedev_dev_m[tmp_brd_num], module_dev_p[tmp_brd_num]);
         pciedev_setup_interrupt(pciedev_interrupt, pciedev_cdev_m->pciedev_dev_m[tmp_brd_num], DEVNAME); 
     }
@@ -101,8 +142,14 @@ static irqreturn_t pciedev_interrupt(int irq, void *dev_id)
      printk(KERN_ALERT "REMOVE CALLED\n");
      tmp_brd_num =pciedev_get_brdnum(dev);
      printk(KERN_ALERT "REMOVE CALLED FOR BOARD %i\n", tmp_brd_num);
+     
+     
      /* clean up any allocated resources and stuff here */
-     kfree(module_dev_p[tmp_brd_num]);
+     if (!IS_ERR_OR_NULL(module_dev_p[tmp_brd_num]))
+     {
+        pciedev_release_mdev(module_dev_p[tmp_brd_num]);
+     }
+     
      /*now we can call pciedev_remove_exp to clean all standard allocated resources
       will clean all interrupts if it seted 
       */
