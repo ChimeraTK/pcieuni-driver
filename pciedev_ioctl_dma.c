@@ -14,46 +14,29 @@
 /**
  * @brief Initiates DMA read from device
  * 
- * This function will find available driver buffer and initiate DMA read from device into the buffer. In case there is no 
- * avaialble buffer or in case the device is busy the fuction will block. Once the DMA transfer is initiated the function 
- * will return immediately.
- * @note Size of requested data can only be as big as the target buffer. Caller should check the dma_size of the returned 
- *       buffer to see how much data will be read. 
+ * This function will initiate DMA read from device into the target buffer. The DMA transfer size and offset are taken
+ * from the target buffer structure. The target buffer is expected to be already synched for device access.
+ * In case the device is busy this fuction will block. Once the DMA transfer is initiated the function will return immediately.
  * @note This function may block.
  * 
- * @param dev        Traget device structure
- * @param dmaOffset  Offset in device memory
- * @param size       Size of data to be read
+ * @param dev          Traget device structure
+ * @param targetBuffer Target buffer
  * 
- * @return           Driver buffer used for DMA transfer
- * @retval   -ENOMEM Failed to get target driver buffer          
+ * @return   0       Success
  * @retval   -EBUSY  Cannot initiate DMA because target device is busy          
  * @retval   -EINTR  Operation was interupted
  * @retval   -EIO    Failed to write to device registers
  */
-pciedev_buffer *pciedev_start_dma_read(pciedev_dev* dev, unsigned long dmaOffset, unsigned long size)
+int pciedev_start_dma_read(pciedev_dev* dev, pciedev_buffer *targetBuffer)
 {
     struct module_dev *mdev = pciedev_get_mdev(dev);
-    pciedev_buffer *targetBuffer = 0;
     int retVal = 0;
     
-    PDEBUG(dev->name, "pciedev_start_dma_read(offset=0x%lx, maxSize=0x%lx)\n", dmaOffset, size); 
-    
-    // Find and reserve target buffer
-    targetBuffer = pciedev_bufferList_get_free(&mdev->dmaBuffers);
-    if (IS_ERR(targetBuffer)) 
-    {
-        return (targetBuffer == ERR_PTR(-EINTR)) ? targetBuffer : ERR_PTR(-ENOMEM);
-    }
-    targetBuffer->dma_size   = min(size, targetBuffer->size);
-    targetBuffer->dma_offset = dmaOffset; 
+    PDEBUG(dev->name, "pciedev_start_dma_read(offset=0x%lx, maxSize=0x%lx)\n", targetBuffer->dma_offset, targetBuffer->dma_size); 
 
-    // prepare buffer to accept DMA data from device
-    dma_sync_single_for_device(&dev->pciedev_pci_dev->dev, targetBuffer->dma_handle, (size_t)targetBuffer->size, DMA_FROM_DEVICE);
-    
     // reserve device registers IO
     retVal = pciedev_dma_reserve(mdev, targetBuffer);
-    if (retVal) goto cleanup_releaseBuffer;
+    if (retVal) return retVal;
     
     // write DMA source address to device register
     retVal = pciedev_register_write32(dev, dev->memmory_base2, DMA_BOARD_ADDRESS, targetBuffer->dma_offset, false);
@@ -75,7 +58,6 @@ pciedev_buffer *pciedev_start_dma_read(pciedev_dev* dev, unsigned long dmaOffset
     
     PDEBUG(dev->name, "pciedev_start_dma_read(): DMA started, offset=0x%lx, size=0x%lx \n", targetBuffer->dma_offset, targetBuffer->dma_size); 
     
-    
 cleanup_releaseDevice:
     if (retVal)
     {
@@ -83,15 +65,7 @@ cleanup_releaseDevice:
         pciedev_dma_release(mdev);
     }
 
-cleanup_releaseBuffer:
-    if (retVal)
-    {
-        // make buffer available for next DMA request
-        dma_sync_single_for_cpu(&dev->pciedev_pci_dev->dev, targetBuffer->dma_handle, (size_t)targetBuffer->size, DMA_FROM_DEVICE);
-        pciedev_bufferList_set_free(&mdev->dmaBuffers, targetBuffer);
-    }
-    
-    return retVal ? ERR_PTR(retVal) : targetBuffer;
+    return retVal;
 }
 
 
@@ -138,7 +112,6 @@ int pciedev_wait_dma_read(module_dev* mdev, pciedev_buffer* buffer)
         }
     }
     
-    dma_sync_single_for_cpu(&mdev->parent_dev->pciedev_pci_dev->dev, buffer->dma_handle, (size_t)buffer->size, DMA_FROM_DEVICE);
     PDEBUG(mdev->parent_dev->name, "pciedev_wait_dma_read(offset=0x%lx, size=0x%lx): Done!",  buffer->dma_offset, buffer->dma_size);
     
     do_gettimeofday(&(mdev->dma_stop_time));
@@ -185,12 +158,31 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
             // if there is more data to be requested from device
             if (dataReq < dmaSize)
             {
-                // request read of next data chunk
-                nextBuffer = pciedev_start_dma_read(dev, devOffset + dataReq, dmaSize - dataReq);
+                // Find and reserve target buffer
+                nextBuffer = pciedev_bufferList_get_free(&mdev->dmaBuffers);
+                if (!IS_ERR(nextBuffer)) 
+                {
+                    // prepare buffer to accept DMA data from device
+                    dma_sync_single_for_device(&dev->pciedev_pci_dev->dev, nextBuffer->dma_handle, (size_t)nextBuffer->size, DMA_FROM_DEVICE);
+
+                    // request read of next data chunk
+                    nextBuffer->dma_size   = min(dmaSize - dataReq, nextBuffer->size);
+                    nextBuffer->dma_offset = devOffset + dataReq;
+                    retVal = pciedev_start_dma_read(dev, nextBuffer);
+                    if (retVal)
+                    {
+                        // make buffer available for next DMA request
+                        dma_sync_single_for_cpu(&dev->pciedev_pci_dev->dev, nextBuffer->dma_handle, (size_t)nextBuffer->size, DMA_FROM_DEVICE);
+                        pciedev_bufferList_set_free(&mdev->dmaBuffers, nextBuffer);
+                        nextBuffer = ERR_PTR(retVal);
+                    }
+                }
+                
                 if (!IS_ERR(nextBuffer))
                 {
                     dataReq += nextBuffer->dma_size; // add to total data requested
                 }
+                
             }
             else
             {
@@ -206,6 +198,7 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
             if (!retVal)
             {
                 // copy data to proper offset in the target user-space buffer 
+                dma_sync_single_for_cpu(&dev->pciedev_pci_dev->dev, prevBuffer->dma_handle, (size_t)prevBuffer->size, DMA_FROM_DEVICE);
                 if (copy_to_user(userBuffer + dataRead, (void*) prevBuffer->kaddr, min(prevBuffer->dma_size, dataSize - dataRead)))
                 {
                     retVal = -EFAULT;
