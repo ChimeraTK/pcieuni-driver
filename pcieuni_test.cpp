@@ -15,7 +15,7 @@
 #include <iostream>
 #include <fstream>
 
-#include "pciedev_io.h"
+#include "pcieuni_io.h"
 
 /* useconds from struct timeval */
 #define	MIKRS(tv) (((double)(tv).tv_usec ) + ((double)(tv).tv_sec * 1000000.0)) 
@@ -141,21 +141,21 @@ int main(int argc, char* argv[])
 			l_Read.mode_rw, l_Read.offset_rw, l_Read.data_rw);
 		break;
            case 2 :
-                ioctl(fd, PCIEDEV_DRIVER_VERSION, &io_RW);
+                ioctl(fd, PCIEUNI_DRIVER_VERSION, &io_RW);
                 tmp_fdata = (float)((float)io_RW.offset/10.0);
                 tmp_fdata += (float)io_RW.data;
                 printf ("DRIVER VERSION IS %f\n", tmp_fdata);
                 break;
 	    case 3 :
-                ioctl(fd, PCIEDEV_FIRMWARE_VERSION, &io_RW);
+                ioctl(fd, PCIEUNI_FIRMWARE_VERSION, &io_RW);
                 printf ("FIRMWARE VERSION IS - %X\n", io_RW.data);
 		break;
             case 4 :
-                ioctl(fd, PCIEDEV_PHYSICAL_SLOT, &io_RW);
+                ioctl(fd, PCIEUNI_PHYSICAL_SLOT, &io_RW);
                 printf ("SLOT NUM IS - %X\n", io_RW.data);
 		break;
             case 5:
-                len = ioctl (fd, PCIEDEV_GET_DMA_TIME, &DMA_TIME);
+                len = ioctl (fd, PCIEUNI_GET_DMA_TIME, &DMA_TIME);
                 if (len) {
                     printf ("######ERROR GET TIME %d\n", len);
                 }
@@ -208,14 +208,14 @@ int main(int argc, char* argv[])
                 memcpy(tmp_dma_buf, &DMA_RW, sizeof (device_ioctrl_dma));
                
                 gettimeofday(&start_time, 0);
-                code = ioctl (fd, PCIEDEV_READ_DMA, tmp_dma_buf);
+                code = ioctl (fd, PCIEUNI_READ_DMA, tmp_dma_buf);
                 gettimeofday(&end_time, 0);
                 printf ("===========READED  CODE %i\n", code);
                 time_tmp    =  MIKRS(end_time) - MIKRS(start_time);
                 time_dlt       =  MILLS(end_time) - MILLS(start_time);
                 printf("STOP READING TIME %fms : %fmks  SIZE %lu\n", time_dlt, time_tmp,(sizeof(int)*tmp_size));
                 printf("STOP READING KBytes/Sec %f\n",((sizeof(int)*tmp_size*1000)/time_tmp));
-                code = ioctl (fd, PCIEDEV_GET_DMA_TIME, &DMA_TIME);
+                code = ioctl (fd, PCIEUNI_GET_DMA_TIME, &DMA_TIME);
                 if (code) {
                     printf ("######ERROR GET TIME %d\n", code);
                 }

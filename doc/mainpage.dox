@@ -5,10 +5,10 @@ It was developed and tested to work with the following borads:
 - SIS8300L with firmware .. TODO 
  
 @section Dependencies
-This module loads on top of the Desy PCIe Common Device Driver (upciedev module). 
+This module loads on top of the Desy PCIe Common Device Driver (upcieuni module). 
 
 @section Build
-    Make sure to first build the upciedev module, because this will install the required header and symbol files.  
+    Make sure to first build the upcieuni module, because this will install the required header and symbol files.  
 
     For release build type:
     @code
@@ -26,7 +26,7 @@ This module loads on top of the Desy PCIe Common Device Driver (upciedev module)
 
     @code
         make install
-        modprobe pciedev
+        modprobe pcieuni
     @endcode
 
     Alternatively one may specify particular size of memory buffers that are used in DMA read operation. The size is 
@@ -34,7 +34,7 @@ This module loads on top of the Desy PCIe Common Device Driver (upciedev module)
 
     @code
         make install
-        modprobe pciedev kbuf_blk_sz_kb=256
+        modprobe pcieuni kbuf_blk_sz_kb=256
     @endcode
 
 @section parameters Module parameters
@@ -52,7 +52,7 @@ Driver. It does however add the following functionalities:
         dma_rw.dma_offset  = 0;
         vector<char> tgtBuffer(1024*1024);
         memcpy(tgtBuffer, dma_rw, sizeof(device_ioctrl_dma));
-        int code = ioctl(devHandle, PCIEDEV_READ_DMA, tgtBuffer);
+        int code = ioctl(devHandle, PCIEUNI_READ_DMA, tgtBuffer);
     @endcode
 
     DMA read algorithm uses a pair of buffers which are allocated on device probe. By default each buffer is 128kB in 
@@ -60,8 +60,8 @@ Driver. It does however add the following functionalities:
     into pieces that fit into kernel buffers, then the two buffers are used interchangeably as DMA target. Each DMA 
     packet is then copied to user space. Copy to user space is done in parallel to PCI board copying data to the other 
     buffer (via DMA). 
-    The core of DMA read algorithm is implemented in function ::pciedev_dma_read(). Note that PCI device singles an 
-    interrupt to let driver know when DMA has finished. Thus one should look at the ::pciedev_interrupt() interrupt 
+    The core of DMA read algorithm is implemented in function ::pcieuni_dma_read(). Note that PCI device singles an 
+    interrupt to let driver know when DMA has finished. Thus one should look at the ::pcieuni_interrupt() interrupt 
     handler to get the whole picture.
 
 */

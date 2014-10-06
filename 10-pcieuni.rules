@@ -1,0 +1,3 @@
+SUBSYSTEM=="pcieuni",	MODE="0666"
+KERNEL=="pcieunis3",	SYMLINK="pcieuni0"
+

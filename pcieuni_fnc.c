@@ -1,10 +1,10 @@
 /**
- *  @file   pciedev_fnc.c
+ *  @file   pcieuni_fnc.c
  *  @brief  Implementation of driver specific utility functions            
  */
 
 #include <linux/sched.h>
-#include "pciedev_fnc.h"
+#include "pcieuni_fnc.h"
 
 /**
  * @brief Allocates and initializes driver specific part of pci device data
@@ -17,16 +17,16 @@
  * @return  Allocated module_dev structure
  * @retval  -ENOMEM     Failed - could not allocate memory
  */
-module_dev* pciedev_create_mdev(int brd_num, pciedev_dev* pcidev, unsigned long bufferSize)
+module_dev* pcieuni_create_mdev(int brd_num, pcieuni_dev* pcidev, unsigned long bufferSize)
 {
     module_dev* mdev;
-    pciedev_buffer* buffer;
+    pcieuni_buffer* buffer;
     ushort i;
     
-    PDEBUG(pcidev->name, "pciedev_create_mdev(brd_num=%i)", brd_num);
+    PDEBUG(pcidev->name, "pcieuni_create_mdev(brd_num=%i)", brd_num);
     
-#ifdef PCIEDEV_TEST_MDEV_ALLOC_FAILURE
-    TEST_RANDOM_EXIT(1, "PCIEDEV: Simulating failed allocation of module_dev structure!", ERR_PTR(-ENOMEM))
+#ifdef PCIEUNI_TEST_MDEV_ALLOC_FAILURE
+    TEST_RANDOM_EXIT(1, "PCIEUNI: Simulating failed allocation of module_dev structure!", ERR_PTR(-ENOMEM))
 #endif   
     
     mdev = kzalloc(sizeof(module_dev), GFP_KERNEL);
@@ -38,20 +38,20 @@ module_dev* pciedev_create_mdev(int brd_num, pciedev_dev* pcidev, unsigned long 
     mdev->parent_dev  = pcidev;
 
     // initalize dma buffer list
-    pciedev_bufferList_init(&mdev->dmaBuffers, pcidev); 
+    pcieuni_bufferList_init(&mdev->dmaBuffers, pcidev); 
     
     // allocate DMA buffers
     for (i = 0; i < 2; i++)
     {
-        buffer = pciedev_buffer_create(pcidev, bufferSize);
+        buffer = pcieuni_buffer_create(pcidev, bufferSize);
         if (IS_ERR(buffer)) break;
-        pciedev_bufferList_append(&mdev->dmaBuffers, buffer);
+        pcieuni_bufferList_append(&mdev->dmaBuffers, buffer);
     }
     
     if (IS_ERR(buffer))
     {
-        printk(KERN_ERR "PCIEDEV(%s): Failed to allocate DMA buffers!\n", pcidev->name);
-        pciedev_bufferList_clear(&mdev->dmaBuffers);
+        printk(KERN_ERR "PCIEUNI(%s): Failed to allocate DMA buffers!\n", pcidev->name);
+        pcieuni_bufferList_clear(&mdev->dmaBuffers);
     }
     
     init_waitqueue_head(&mdev->waitDMA);
@@ -70,14 +70,14 @@ module_dev* pciedev_create_mdev(int brd_num, pciedev_dev* pcidev, unsigned long 
  * @param mdev   module_dev sructure to be released
  * @return void
  */
-void pciedev_release_mdev(module_dev* mdev)
+void pcieuni_release_mdev(module_dev* mdev)
 {
     if (!IS_ERR_OR_NULL(mdev))
     {
-        PDEBUG(mdev->parent_dev->name, "pciedev_release_mdev()");
+        PDEBUG(mdev->parent_dev->name, "pcieuni_release_mdev()");
         
         // clear the buffers gracefully
-        pciedev_bufferList_clear(&mdev->dmaBuffers);
+        pcieuni_bufferList_clear(&mdev->dmaBuffers);
         
         // clear the module_dev structure
         kfree(mdev);
@@ -90,7 +90,7 @@ void pciedev_release_mdev(module_dev* mdev)
  * @param   dev     Universal driver pci device structure
  * @return  module_dev structure
  */
-module_dev* pciedev_get_mdev(struct pciedev_dev *dev)
+module_dev* pcieuni_get_mdev(struct pcieuni_dev *dev)
 {
     struct module_dev *mdev = (struct module_dev*)(dev->dev_str);
     return mdev;
@@ -108,12 +108,12 @@ module_dev* pciedev_get_mdev(struct pciedev_dev *dev)
  * @retval  -EINTR Operation was interrupted
  * @retval  -EBUSY Operation timed out
  */
-int pciedev_dma_reserve(module_dev* mdev, pciedev_buffer* buffer)
+int pcieuni_dma_reserve(module_dev* mdev, pcieuni_buffer* buffer)
 {
     long waitVal = 0;
     long timeout = HZ/1;
     
-    PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve()");
+    PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve()");
    
     // protect against concurrent reservation of waitFlag
     if (down_interruptible(&mdev->dma_sem))
@@ -126,27 +126,27 @@ int pciedev_dma_reserve(module_dev* mdev, pciedev_buffer* buffer)
         // wait for DMA to be available
         up(&mdev->dma_sem);
         
-        PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Waiting until dma available...\n"); 
+        PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve(): Waiting until dma available...\n"); 
         waitVal = wait_event_interruptible_timeout(mdev->waitDMA, mdev->waitFlag, timeout);
         if (0 == waitVal)
         {
-            PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Timeout!\n"); 
+            PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve(): Timeout!\n"); 
             return -EBUSY; 
         }
         else if (0 > waitVal)
         {
-            PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Interrupted!\n"); 
+            PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve(): Interrupted!\n"); 
             return -EINTR;
         }
         
-#ifdef PCIEDEV_TEST_DEVICE_DMA_BLOCKED
-        TEST_RANDOM_EXIT(100, "PCIEDEV: Simulating blocked DMA !", -EBUSY)
+#ifdef PCIEUNI_TEST_DEVICE_DMA_BLOCKED
+        TEST_RANDOM_EXIT(100, "PCIEUNI: Simulating blocked DMA !", -EBUSY)
 #endif
         
         // protect against concurrent reservation of waitFlag
         if (down_interruptible(&mdev->dma_sem))
         {
-            PDEBUG(mdev->parent_dev->name, "pciedev_dma_reserve(): Interrupted!\n"); 
+            PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve(): Interrupted!\n"); 
             return -EINTR;
         }        
     }
@@ -166,9 +166,9 @@ int pciedev_dma_reserve(module_dev* mdev, pciedev_buffer* buffer)
  * 
  * @param mdev  Driver device structure
  */
-void pciedev_dma_release(module_dev* mdev)
+void pcieuni_dma_release(module_dev* mdev)
 {
-    PDEBUG(mdev->parent_dev->name, "pciedev_dma_release()");
+    PDEBUG(mdev->parent_dev->name, "pcieuni_dma_release()");
     mdev->waitFlag   = 1;
     mdev->dma_buffer = 0; 
     wake_up_interruptible(&(mdev->waitDMA));

@@ -165,7 +165,7 @@ int TDevice::RegRead(int bar, long offset, unsigned char* data, long dataSize)
  */
 int TDevice::KringReadDma(device_ioctrl_dma& dma_rw, char* buffer)
 {
-    return this->Ioctl(PCIEDEV_READ_DMA, &dma_rw, buffer);
+    return this->Ioctl(PCIEUNI_READ_DMA, &dma_rw, buffer);
 }
 
 /**

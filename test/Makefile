@@ -8,8 +8,8 @@ CXXFLAGS      = -pipe -g -std=c++0x -Wall -Wextra -pedantic -W -D_REENTRANT $(DE
 
 debug:  CXXFLAGS += -DMOCK_DEVICES
 
-ifdef UPCIEDEV_INCLUDE
-	CXXFLAGS += -I$(UPCIEDEV_INCLUDE)
+ifdef GPCIEUNI_INCLUDE
+	CXXFLAGS += -I$(GPCIEUNI_INCLUDE)
 endif
 INCPATH       =  -I. 
 LINK          = g++

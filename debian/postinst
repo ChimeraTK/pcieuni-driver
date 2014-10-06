@@ -1,5 +1,5 @@
 #! /bin/sh
-# postinst script for pciedev-dkms
+# postinst script for pcieuni-dkms
 #
 # see: dh_installdeb(1)
 
@@ -9,5 +9,5 @@
 
 #DEBHELPER#
 
-modprobe pciedev
+modprobe pcieuni
 

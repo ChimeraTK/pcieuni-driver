@@ -7,6 +7,6 @@ override_dh_auto_build:
 	:
 
 override_dh_auto_install:
-	dh_install pciedev_drv.c  pciedev_fnc.h pciedev_fnc.c  pciedev_ioctl_dma.c pciedev_test.cpp  Makefile /usr/src/pciedev-1/
-	dh_install 10-pciedev.rules /etc/udev/rules.d/
+	dh_install pcieuni_drv.c  pcieuni_fnc.h pcieuni_fnc.c  pcieuni_ioctl_dma.c pcieuni_test.cpp  Makefile /usr/src/pcieuni-1/
+	dh_install 10-pcieuni.rules /etc/udev/rules.d/
 	dh_dkms

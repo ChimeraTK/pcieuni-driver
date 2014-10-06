@@ -1,7 +1,7 @@
 /**
 @mainpage PCI device test tool documentation
 This PCI device test tool was written to measure performance of different DMA read methods implemented in the 
-DESY PCIe Device Driver (pciedev). As all but one method were obsoleted in the driver, this test tool also now 
+DESY PCIe Device Driver (pcieuni). As all but one method were obsoleted in the driver, this test tool also now 
 only tests one method, but could be easily extedned to support additional tests.
 
 User can specify multiple target devices to test with. When multiple devices are provided most tests will execute

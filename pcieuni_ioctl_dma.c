@@ -1,5 +1,5 @@
 /**
- *  @file   pciedev_ioctl_dma.c
+ *  @file   pcieuni_ioctl_dma.c
  *  @brief  Implementation of DMA related IOCTL handlers
  */
 
@@ -8,8 +8,8 @@
 #include <linux/pagemap.h>
 #include <linux/kernel.h>
 
-#include "pciedev_fnc.h"
-#include "pciedev_buffer.h"
+#include "pcieuni_fnc.h"
+#include "pcieuni_buffer.h"
         
 /**
  * @brief Initiates DMA read from device
@@ -27,23 +27,23 @@
  * @retval   -EINTR  Operation was interupted
  * @retval   -EIO    Failed to write to device registers
  */
-int pciedev_start_dma_read(pciedev_dev* dev, pciedev_buffer *targetBuffer)
+int pcieuni_start_dma_read(pcieuni_dev* dev, pcieuni_buffer *targetBuffer)
 {
-    struct module_dev *mdev = pciedev_get_mdev(dev);
+    struct module_dev *mdev = pcieuni_get_mdev(dev);
     int retVal = 0;
     
-    PDEBUG(dev->name, "pciedev_start_dma_read(offset=0x%lx, maxSize=0x%lx)\n", targetBuffer->dma_offset, targetBuffer->dma_size); 
+    PDEBUG(dev->name, "pcieuni_start_dma_read(offset=0x%lx, maxSize=0x%lx)\n", targetBuffer->dma_offset, targetBuffer->dma_size); 
 
     // reserve device registers IO
-    retVal = pciedev_dma_reserve(mdev, targetBuffer);
+    retVal = pcieuni_dma_reserve(mdev, targetBuffer);
     if (retVal) return retVal;
     
     // write DMA source address to device register
-    retVal = pciedev_register_write32(dev, dev->memmory_base2, DMA_BOARD_ADDRESS, targetBuffer->dma_offset, false);
+    retVal = pcieuni_register_write32(dev, dev->memmory_base2, DMA_BOARD_ADDRESS, targetBuffer->dma_offset, false);
     if (retVal) goto cleanup_releaseDevice;
     
     // write DMA destination address to device register
-    retVal = pciedev_register_write32(dev, dev->memmory_base2, DMA_CPU_ADDRESS, (u32)(targetBuffer->dma_handle & 0xFFFFFFFF), true);
+    retVal = pcieuni_register_write32(dev, dev->memmory_base2, DMA_CPU_ADDRESS, (u32)(targetBuffer->dma_handle & 0xFFFFFFFF), true);
     if (retVal) goto cleanup_releaseDevice; 
     
     do_gettimeofday(&(mdev->dma_start_time));
@@ -53,16 +53,16 @@ int pciedev_start_dma_read(pciedev_dev* dev, pciedev_buffer *targetBuffer)
     mdev->dma_buffer = targetBuffer; 
     
     // write DMA size and start DMA
-    retVal = pciedev_register_write32(dev, dev->memmory_base2, DMA_SIZE_ADDRESS, targetBuffer->dma_size, false);
+    retVal = pcieuni_register_write32(dev, dev->memmory_base2, DMA_SIZE_ADDRESS, targetBuffer->dma_size, false);
     if (retVal) goto cleanup_releaseDevice; 
     
-    PDEBUG(dev->name, "pciedev_start_dma_read(): DMA started, offset=0x%lx, size=0x%lx \n", targetBuffer->dma_offset, targetBuffer->dma_size); 
+    PDEBUG(dev->name, "pcieuni_start_dma_read(): DMA started, offset=0x%lx, size=0x%lx \n", targetBuffer->dma_offset, targetBuffer->dma_size); 
     
 cleanup_releaseDevice:
     if (retVal)
     {
         // release device registers IO
-        pciedev_dma_release(mdev);
+        pcieuni_dma_release(mdev);
     }
 
     return retVal;
@@ -80,39 +80,39 @@ cleanup_releaseDevice:
  * @retval -EIO         Timed out while waiting for end of DMA IRQ
  * @retval -EINTR       Interrupted while waiting for end of DMA IRQ
  */
-int pciedev_wait_dma_read(module_dev* mdev, pciedev_buffer* buffer)
+int pcieuni_wait_dma_read(module_dev* mdev, pcieuni_buffer* buffer)
 {
     int   code;
     ulong timeout = HZ/1; // Timeout in 1 second
     
-    PDEBUG(mdev->parent_dev->name, "pciedev_wait_dma_read(offset=0x%lx, size=0x%lx)", buffer->dma_offset, buffer->dma_size);
+    PDEBUG(mdev->parent_dev->name, "pcieuni_wait_dma_read(offset=0x%lx, size=0x%lx)", buffer->dma_offset, buffer->dma_size);
     while(test_bit(BUFFER_STATE_WAITING, &buffer->state))
     {
         // DMA not finished yet - wait for IRQ handler 
-        PDEBUG( mdev->parent_dev->name, "pciedev_wait_dma_read(offset=0x%lx, size=0x%lx): Waiting... \n", buffer->dma_offset, buffer->dma_size); 
+        PDEBUG( mdev->parent_dev->name, "pcieuni_wait_dma_read(offset=0x%lx, size=0x%lx): Waiting... \n", buffer->dma_offset, buffer->dma_size); 
         
         code = wait_event_interruptible_timeout( mdev->waitDMA, !test_bit(BUFFER_STATE_WAITING, &buffer->state), timeout);
         if (code == 0)
         {
-            printk(KERN_ALERT "PCIEDEV(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): TIMEOUT!\n", 
+            printk(KERN_ALERT "PCIEUNI(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): TIMEOUT!\n", 
                    mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size);
             
             // assuming we missed the interrupt
-            pciedev_dma_release(mdev); 
+            pcieuni_dma_release(mdev); 
             return -EIO; 
         }
         else if (code < 0)
         {
-            printk(KERN_ALERT "PCIEDEV(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): errno=%d!\n", 
+            printk(KERN_ALERT "PCIEUNI(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): errno=%d!\n", 
                    mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size, code);
             
             // assuming we missed the interrupt
-            pciedev_dma_release(mdev);
+            pcieuni_dma_release(mdev);
             return -EINTR; 
         }
     }
     
-    PDEBUG(mdev->parent_dev->name, "pciedev_wait_dma_read(offset=0x%lx, size=0x%lx): Done!",  buffer->dma_offset, buffer->dma_size);
+    PDEBUG(mdev->parent_dev->name, "pcieuni_wait_dma_read(offset=0x%lx, size=0x%lx): Done!",  buffer->dma_offset, buffer->dma_size);
     
     do_gettimeofday(&(mdev->dma_stop_time));
     return 0;
@@ -134,17 +134,17 @@ int pciedev_wait_dma_read(module_dev* mdev, pciedev_buffer* buffer)
  * @retval  -EIO       Failed to write to device registers
  * @retval  -EIO       Timed out while waiting for end of DMA IRQ from device
  */
-int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long dataSize, void* userBuffer)
+int pcieuni_dma_read(pcieuni_dev* dev, unsigned long devOffset, unsigned long dataSize, void* userBuffer)
 {
     int retVal = 0;
-    unsigned long dmaSize   = PCIEDEV_DMA_SYZE * DIV_ROUND_UP(dataSize, PCIEDEV_DMA_SYZE); // round up total read-size to page boundary
+    unsigned long dmaSize   = PCIEUNI_DMA_SYZE * DIV_ROUND_UP(dataSize, PCIEUNI_DMA_SYZE); // round up total read-size to page boundary
     unsigned long dataReq   = 0;  // Total size of data that was requested from device
     unsigned long dataRead  = 0;  // Total size of data read from device
-    pciedev_buffer* prevBuffer = 0; // buffer used for read in previous loop
-    pciedev_buffer* nextBuffer = 0; // buffer to read to in this loop
-    struct module_dev* mdev  = pciedev_get_mdev(dev);
+    pcieuni_buffer* prevBuffer = 0; // buffer used for read in previous loop
+    pcieuni_buffer* nextBuffer = 0; // buffer to read to in this loop
+    struct module_dev* mdev  = pcieuni_get_mdev(dev);
     
-    PDEBUG(dev->name, "pciedev_dma_read(devOffset=0x%lx, dataSize=0x%lx)\n", devOffset, dataSize); 
+    PDEBUG(dev->name, "pcieuni_dma_read(devOffset=0x%lx, dataSize=0x%lx)\n", devOffset, dataSize); 
     
     // Loop until data is read 
     for (; !IS_ERR(prevBuffer) && (dataRead < dmaSize); )
@@ -159,21 +159,21 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
             if (dataReq < dmaSize)
             {
                 // Find and reserve target buffer
-                nextBuffer = pciedev_bufferList_get_free(&mdev->dmaBuffers);
+                nextBuffer = pcieuni_bufferList_get_free(&mdev->dmaBuffers);
                 if (!IS_ERR(nextBuffer)) 
                 {
                     // prepare buffer to accept DMA data from device
-                    dma_sync_single_for_device(&dev->pciedev_pci_dev->dev, nextBuffer->dma_handle, (size_t)nextBuffer->size, DMA_FROM_DEVICE);
+                    dma_sync_single_for_device(&dev->pcieuni_pci_dev->dev, nextBuffer->dma_handle, (size_t)nextBuffer->size, DMA_FROM_DEVICE);
 
                     // request read of next data chunk
                     nextBuffer->dma_size   = min(dmaSize - dataReq, nextBuffer->size);
                     nextBuffer->dma_offset = devOffset + dataReq;
-                    retVal = pciedev_start_dma_read(dev, nextBuffer);
+                    retVal = pcieuni_start_dma_read(dev, nextBuffer);
                     if (retVal)
                     {
                         // make buffer available for next DMA request
-                        dma_sync_single_for_cpu(&dev->pciedev_pci_dev->dev, nextBuffer->dma_handle, (size_t)nextBuffer->size, DMA_FROM_DEVICE);
-                        pciedev_bufferList_set_free(&mdev->dmaBuffers, nextBuffer);
+                        dma_sync_single_for_cpu(&dev->pcieuni_pci_dev->dev, nextBuffer->dma_handle, (size_t)nextBuffer->size, DMA_FROM_DEVICE);
+                        pcieuni_bufferList_set_free(&mdev->dmaBuffers, nextBuffer);
                         nextBuffer = ERR_PTR(retVal);
                     }
                 }
@@ -194,11 +194,11 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
         if (prevBuffer)
         {
             // wait until data read is completed (device irq)
-            retVal = pciedev_wait_dma_read(mdev, prevBuffer); 
+            retVal = pcieuni_wait_dma_read(mdev, prevBuffer); 
             if (!retVal)
             {
                 // copy data to proper offset in the target user-space buffer 
-                dma_sync_single_for_cpu(&dev->pciedev_pci_dev->dev, prevBuffer->dma_handle, (size_t)prevBuffer->size, DMA_FROM_DEVICE);
+                dma_sync_single_for_cpu(&dev->pcieuni_pci_dev->dev, prevBuffer->dma_handle, (size_t)prevBuffer->size, DMA_FROM_DEVICE);
                 if (copy_to_user(userBuffer + dataRead, (void*) prevBuffer->kaddr, min(prevBuffer->dma_size, dataSize - dataRead)))
                 {
                     retVal = -EFAULT;
@@ -210,7 +210,7 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
                 }
             }
             // mark buffer available
-            pciedev_bufferList_set_free(&mdev->dmaBuffers, prevBuffer); 
+            pcieuni_bufferList_set_free(&mdev->dmaBuffers, prevBuffer); 
         }
         
         prevBuffer = nextBuffer;
@@ -221,7 +221,7 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
         retVal = retVal ? retVal : PTR_ERR(prevBuffer);
     }
     
-    PDEBUG(dev->name, "pciedev_dma_read(devOffset=0x%lx, dataSize=0x%lx): Return code(%i)\n", devOffset, dataSize, retVal); 
+    PDEBUG(dev->name, "pcieuni_dma_read(devOffset=0x%lx, dataSize=0x%lx): Return code(%i)\n", devOffset, dataSize, retVal); 
     
     return retVal;
 }
@@ -234,11 +234,11 @@ int pciedev_dma_read(pciedev_dev* dev, unsigned long devOffset, unsigned long da
  * @param filp      Device file
  * @param cmd_p     IOCTL command
  * @param arg_p     IOCLT arguments
- * @param pciedev_cdev_m 
+ * @param pcieuni_cdev_m 
  * @retval 0    success
  * @retval <0   error code
  */
-long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *arg_p, pciedev_cdev * pciedev_cdev_m)
+long pcieuni_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *arg_p, pcieuni_cdev * pcieuni_cdev_m)
 {
     unsigned int    cmd;
     unsigned long arg;
@@ -255,8 +255,8 @@ long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
     device_ioctrl_dma   dma_data;
     
     module_dev       *module_dev_pp;
-    pciedev_dev       *dev  = filp->private_data;
-    module_dev_pp = pciedev_get_mdev(dev);
+    pcieuni_dev       *dev  = filp->private_data;
+    module_dev_pp = pcieuni_get_mdev(dev);
     
     cmd         = *cmd_p;
     arg         = *arg_p;
@@ -265,16 +265,16 @@ long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
     minor       = dev->dev_minor;
     d_num       = dev->dev_num;	
     cur_proc    = current->group_leader->pid;
-    pdev        = (dev->pciedev_pci_dev);
+    pdev        = (dev->pcieuni_pci_dev);
 
     
     if(!dev->dev_sts){
-        printk(KERN_ALERT "PCIEDEV_IOCTRL: NO DEVICE %d\n", dev->dev_num);
+        printk(KERN_ALERT "PCIEUNI_IOCTRL: NO DEVICE %d\n", dev->dev_num);
         retval = -EFAULT;
         return retval;
     }
     
-    PDEBUG(dev->name, "pciedev_ioctl_dma(nr=%d )", _IOC_NR(cmd));
+    PDEBUG(dev->name, "pcieuni_ioctl_dma(nr=%d )", _IOC_NR(cmd));
     
     /*
     * the direction is a bitmask, and VERIFY_WRITE catches R/W
@@ -293,7 +293,7 @@ long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
         return -ERESTARTSYS;
 
     switch (cmd) {
-        case PCIEDEV_GET_DMA_TIME:
+        case PCIEUNI_GET_DMA_TIME:
             retval = 0;
             
             module_dev_pp->dma_start_time.tv_sec  += (long)dev->slot_num;
@@ -309,7 +309,7 @@ long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
             }
             break;
                             
-        case PCIEDEV_READ_DMA:
+        case PCIEUNI_READ_DMA:
         {
             // Copy DMA transfer arguments into workqeue-data structure 
             if (copy_from_user(&dma_data, (void*)arg, io_dma_size)) {
@@ -317,7 +317,7 @@ long pciedev_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
                 return -EFAULT;
             }
             
-            retval = pciedev_dma_read(dev, dma_data.dma_offset, dma_data.dma_size, (void*)arg);
+            retval = pcieuni_dma_read(dev, dma_data.dma_offset, dma_data.dma_size, (void*)arg);
             break;
         }   
         
