@@ -198,7 +198,7 @@ static ssize_t pcieuni_read(struct file *filp, char __user *buf, size_t count, l
 static ssize_t pcieuni_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
 {
     ssize_t         retval = 0;
-    retval = pcieuni_write_exp(filp, buf, count, f_pos);
+    retval = pcieuni_write_no_struct_exp(filp, buf, count, f_pos);
     return retval;
 }
 
