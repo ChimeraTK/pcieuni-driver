@@ -191,14 +191,14 @@ static int pcieuni_release(struct inode *inode, struct file *filp)
 static ssize_t pcieuni_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
     ssize_t    retval         = 0;
-    retval  = pcieuni_read_exp(filp, buf, count, f_pos);
+    retval  = pcieuni_read_no_struct_exp(filp, buf, count, f_pos);
     return retval;
 }
 
 static ssize_t pcieuni_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
 {
     ssize_t         retval = 0;
-    retval = pcieuni_write_exp(filp, buf, count, f_pos);
+    retval = pcieuni_write_no_struct_exp(filp, buf, count, f_pos);
     return retval;
 }
 
@@ -206,9 +206,9 @@ static long  pcieuni_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 {
     long result = 0;
     
-    //if (_IOC_TYPE(cmd) != PCIEDOOCS_IOC) return -ENOTTY; /*For future check if cmd is right*/
-    if (_IOC_TYPE(cmd) == PCIEDOOCS_IOC){
-        if (_IOC_NR(cmd) <= PCIEDOOCS_IOC_MAXNR && _IOC_NR(cmd) >= PCIEDOOCS_IOC_MINNR) {
+    //if (_IOC_TYPE(cmd) != PCIEUNI_IOC) return -ENOTTY; /*For future check if cmd is right*/
+    if (_IOC_TYPE(cmd) == PCIEUNI_IOC){
+        if (_IOC_NR(cmd) <= PCIEUNI_IOC_MAXNR && _IOC_NR(cmd) >= PCIEUNI_IOC_MINNR) {
             result = pcieuni_ioctl_exp(filp, &cmd, &arg, pcieuni_cdev_m);
         }else{
             result = pcieuni_ioctl_dma(filp, &cmd, &arg, pcieuni_cdev_m);
