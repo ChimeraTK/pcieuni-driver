@@ -16,7 +16,7 @@
 
 MODULE_AUTHOR("Ludwig Petrosyan");
 MODULE_DESCRIPTION("DESY AMC-PCIE board driver");
-MODULE_VERSION("2.0.0");
+MODULE_VERSION("2.1.0");
 MODULE_LICENSE("Dual BSD/GPL");
 
 
@@ -28,7 +28,6 @@ module_param(kbuf_blk_sz_kb, ulong, S_IRUGO);
 
 
 pcieuni_cdev     *pcieuni_cdev_m = 0;
-//pcieuni_dev       *pcieuni_dev_m   = 0;
 module_dev       *module_dev_p[PCIEUNI_NR_DEVS];
 
 static int     pcieuni_open( struct inode *inode, struct file *filp );
@@ -70,8 +69,8 @@ static irqreturn_t sis8300_interrupt(int irq, void *dev_id, struct pt_regs *regs
 static irqreturn_t pcieuni_interrupt(int irq, void *dev_id)
 #endif
 {
-    struct pcieuni_dev *dev = (pcieuni_dev*)dev_id;
-    struct module_dev *mdev = pcieuni_get_mdev(dev);
+    pcieuni_dev *dev = (pcieuni_dev*)dev_id;
+    module_dev *mdev = pcieuni_get_mdev(dev);
     
     PDEBUG(dev->name, "pcieuni_interrupt(irq=%i)\n", irq);
     
@@ -104,7 +103,7 @@ static irqreturn_t pcieuni_interrupt(int irq, void *dev_id)
     int tmp_brd_num = -1;
     
     printk(KERN_ALERT "PCIEUNI_PROBE CALLED \n");
-    result = pcieuni_probe_exp(dev, id, &pcieuni_fops, &pcieuni_cdev_m, DEVNAME, &tmp_brd_num);
+    result = pcieuni_probe_exp(dev, id, &pcieuni_fops, pcieuni_cdev_m, DEVNAME, &tmp_brd_num);
     printk(KERN_ALERT "PCIEUNI_PROBE_EXP CALLED  FOR BOARD %i\n", tmp_brd_num);
 
     /*if board has created we will create our structure and pass it to pcedev_dev*/
@@ -118,7 +117,7 @@ static irqreturn_t pcieuni_interrupt(int irq, void *dev_id)
             result = PTR_ERR(module_dev_p[tmp_brd_num]);
             printk(KERN_ERR "PCIEUNI_PROBE Failed to allocte device driver structures for board %i (errno=%i)\n", tmp_brd_num, result);
             
-            pcieuni_remove_exp(dev,  &pcieuni_cdev_m, DEVNAME, &tmp_brd_num);
+            pcieuni_remove_exp(dev,  pcieuni_cdev_m, DEVNAME, &tmp_brd_num);
             printk(KERN_ALERT "PCIEUNI_REMOVE_EXP CALLED  FOR SLOT %i\n", tmp_brd_num);
             return result;
         }
@@ -153,7 +152,7 @@ static irqreturn_t pcieuni_interrupt(int irq, void *dev_id)
      /*now we can call pcieuni_remove_exp to clean all standard allocated resources
       will clean all interrupts if it seted 
       */
-     result = pcieuni_remove_exp(dev,  &pcieuni_cdev_m, DEVNAME, &tmp_slot_num);
+     result = pcieuni_remove_exp(dev,  pcieuni_cdev_m, DEVNAME, &tmp_slot_num);
      printk(KERN_ALERT "PCIEUNI_REMOVE_EXP CALLED  FOR SLOT %i\n", tmp_slot_num);
 }
 
@@ -232,8 +231,8 @@ static int __init pcieuni_init_module(void)
     
     printk(KERN_ALERT "AFTER_INIT:REGISTERING PCI DRIVER\n");
     result = pci_register_driver(&pci_pcieuni_driver);
-    printk(KERN_ALERT "AFTER_INIT:REGISTERING PCI DRIVER RESUALT %d\n", result);
-    return 0; /* succeed */
+    printk(KERN_ALERT "AFTER_INIT:REGISTERING PCI DRIVER RESULT %d\n", result);
+    return result; /* succeed */
 }
 
 module_init(pcieuni_init_module);
