@@ -15,7 +15,7 @@
 #include <iostream>
 #include <fstream>
 
-#include "pcieuni_io.h"
+#include <gpciedev/pcieuni_io.h>
 
 /* useconds from struct timeval */
 #define	MIKRS(tv) (((double)(tv).tv_usec ) + ((double)(tv).tv_sec * 1000000.0)) 

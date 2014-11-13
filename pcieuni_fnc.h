@@ -8,9 +8,9 @@
 
 #include <linux/semaphore.h>
 
-#include "pcieuni_io.h"
-#include "pcieuni_ufn.h"
-#include "pcieuni_buffer.h"
+#include <gpcieuni/pcieuni_io.h>
+#include <gpcieuni/pcieuni_ufn.h>
+#include <gpcieuni/pcieuni_buffer.h>
 
 #define DEVNAME "pcieuni"	                             /* name of device */
 #define PCIEUNI_VENDOR_ID 0x10EE	                    /* XILINX vendor ID */

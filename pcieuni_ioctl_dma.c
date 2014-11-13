@@ -9,7 +9,7 @@
 #include <linux/kernel.h>
 
 #include "pcieuni_fnc.h"
-#include "pcieuni_buffer.h"
+#include <gpcieuni/pcieuni_buffer.h>
         
 /**
  * @brief Initiates DMA read from device

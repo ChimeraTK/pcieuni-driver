@@ -12,7 +12,7 @@
 #include <linux/mm.h>
 
 #include "pcieuni_fnc.h"
-#include "pcieuni_buffer.h"
+#include <gpcieuni/pcieuni_buffer.h>
 
 MODULE_AUTHOR("Ludwig Petrosyan");
 MODULE_DESCRIPTION("DESY AMC-PCIE board driver");
