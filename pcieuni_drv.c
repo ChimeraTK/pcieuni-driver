@@ -223,12 +223,15 @@ static void __exit pcieuni_cleanup_module(void)
     printk(KERN_NOTICE "PCIEUNI_CLEANUP_MODULE CALLED\n");
     pci_unregister_driver(&pci_pcieuni_driver);
     printk(KERN_NOTICE "PCIEUNI_CLEANUP_MODULE: PCI DRIVER UNREGISTERED\n");
+    pcieuni_cleanup_module_exp(&pcieuni_cdev_m);
 }
 
 static int __init pcieuni_init_module(void)
 {
     int   result  = 0;
-    
+
+    printk(KERN_ALERT "INIT: CALLING PCIEUNI INIT \n");
+    result = pcieuni_init_module_exp(&pcieuni_cdev_m, &pcieuni_fops, DEVNAME);
     printk(KERN_ALERT "AFTER_INIT:REGISTERING PCI DRIVER\n");
     result = pci_register_driver(&pci_pcieuni_driver);
     printk(KERN_ALERT "AFTER_INIT:REGISTERING PCI DRIVER RESULT %d\n", result);
