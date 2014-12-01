@@ -1,0 +1,10 @@
+PACKAGE_NAME="pcieuni"
+PACKAGE_VERSION="@PCIEUNI_PACKAGE_VERSION@"
+BUILT_MODULE_NAME[0]="pcieuni"
+AUTOINSTALL="yes"
+MAKE[0]="make KVERSION=$kernelver"
+CLEAN="make clean"
+DEST_MODULE_LOCATION[0]="/extra"
+POST_INSTALL=dkms.post_install
+POST_REMOVE=dkms.post_remove
+

@@ -9,11 +9,15 @@ PCIEUNI_PACKAGE_VERSION=0.1.0
 all: configure-source-files
 	make -C /lib/modules/$(KVERSION)/build V=1 M=$(PWD) modules
 
-install: all
-	make -C /lib/modules/$(KVERSION)/build V=1 M=$(PWD) modules_install
-	cp 10-pcieuni.rules /etc/udev/rules.d
-	depmod
+#Performs a dkms install
+install: dkms-prepare
+	dkms install -m pcieuni -v ${PCIEUNI_PACKAGE_VERSION} -k $(KVERSION)
 
+#Performs a dmks remove
+uninstall:
+	dkms remove -m pcieuni -v ${PCIEUNI_PACKAGE_VERSION} -k $(KVERSION)
+
+#compile with debug flag, causes lots of kernel output
 debug:
 	KCPPFLAGS="-DPCIEUNI_DEBUG" make all
 
@@ -33,3 +37,13 @@ KBUILD_EXTRA_SYMBOLS = /lib/modules/$(KVERSION)/gpcieuni/Module.symvers
 #A target which replaces the version number in the source files
 configure-source-files:
 	cat pcieuni_drv.c.in | sed "{s/@PCIEUNI_PACKAGE_VERSION@/${PCIEUNI_PACKAGE_VERSION}/}" > pcieuni_drv.c
+
+#A target which replaces the version number in the control files for
+#dkms and debian packaging
+configure-package-files:
+	cat dkms.conf.in | sed "{s/@PCIEUNI_PACKAGE_VERSION@/${PCIEUNI_PACKAGE_VERSION}/}" > dkms.conf
+
+#copies the package sources to the place needed by dkms
+dkms-prepare: configure-source-files configure-package-files
+	test -d /usr/src/pcieuni-${PCIEUNI_PACKAGE_VERSION} || mkdir /usr/src/pcieuni-${PCIEUNI_PACKAGE_VERSION}
+	cp *.h *.c pcieuni_drv.c.in Makefile dkms.conf dkms.post_* *.rules /usr/src/pcieuni-${PCIEUNI_PACKAGE_VERSION}
