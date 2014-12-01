@@ -1,6 +1,9 @@
 /**
- *  @file   pcieuni_drv.c
- *  @brief  Implementation of driver operations           
+ *  pcieuni_drv.c is automatically generated from  pcieuni_drv.c.in
+ *  Do not edit it directly.
+ *
+ *  pcieuni_drv.c.in is the input file for the Makefile, which replaces the module
+ *  version number before compiling.
  */
 
 #include <linux/module.h>
@@ -14,9 +17,9 @@
 #include "pcieuni_fnc.h"
 #include <gpcieuni/pcieuni_buffer.h>
 
-MODULE_AUTHOR("Ludwig Petrosyan");
-MODULE_DESCRIPTION("DESY AMC-PCIE board driver");
-MODULE_VERSION("2.1.0");
+MODULE_AUTHOR("Martin Killenber");
+MODULE_DESCRIPTION("Universal PCIe driver");
+MODULE_VERSION("@PCIEUNI_PACKAGE_VERSION@");
 MODULE_LICENSE("Dual BSD/GPL");
 
 
