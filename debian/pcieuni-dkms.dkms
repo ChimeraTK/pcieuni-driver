@@ -1,8 +1,0 @@
-PACKAGE_NAME="pcieuni"
-PACKAGE_VERSION="1"
-BUILT_MODULE_NAME[0]="pcieuni"
-AUTOINSTALL="yes"
-MAKE[0]="make KVERSION=$kernelver"
-CLEAN="make clean"
-DEST_MODULE_LOCATION[0]="/extra"
-BUILD_DEPENDS="gpcieuni"

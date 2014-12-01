@@ -7,4 +7,6 @@ CLEAN="make clean"
 DEST_MODULE_LOCATION[0]="/extra"
 POST_INSTALL=dkms.post_install
 POST_REMOVE=dkms.post_remove
+BUILD_DEPENDS[0]="gpcieuni"
+
 

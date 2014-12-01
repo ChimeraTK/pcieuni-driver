@@ -1,16 +1,15 @@
 Source: pcieuni-dkms
 Section: contrib/kernel
 Priority: extra
-Maintainer: Ludwig Petrosyan <lyudvig.petrosyan@desy.de>
+Maintainer: Martin Killenberg <martin.killenberg@desy.de>
 Build-Depends: debhelper (>= 7), dkms
-Standards-Version: 1.0.32
+Standards-Version: 3.8.1
 
 Package: pcieuni-dkms
 Architecture: all
-Depends: ${misc:Depends}, dkms, gpcieuni-dkms
-Description: kernel module for pcieuni
- PCIExpress Device Driver for uTCA
+Depends: ${misc:Depends}, dkms, gpcieuni-dkms (>=0.1)
+Description: Universal PCIexpress device driver for  MicroTCA and
+ other hot-plug capable architectures.
  .
  This package contains the dkms sources. When installed, it will build
  the module for your kernel.
- DOOCS-EXTERN
