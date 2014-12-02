@@ -1,6 +1,8 @@
 /**
  *  @file   pcieuni_fnc.h
  *  @brief  Driver specific definitions           
+ *  
+ *  
  */
 
 #ifndef _PCIEUNI_FNC_H_
@@ -14,9 +16,13 @@
 
 #define DEVNAME "pcieuni"	                             /* name of device */
 #define PCIEUNI_VENDOR_ID 0x10EE	                    /* XILINX vendor ID */
-#define PCIEUNI_DEVICE_ID 0x0088	                    /* PCIEUNI dev board device ID or 0x0088 */
-#define PCIEUNI_SUBVENDOR_ID PCI_ANY_ID	 /* ESDADIO vendor ID */
-#define PCIEUNI_SUBDEVICE_ID PCI_ANY_ID           /* ESDADIO device ID */
+#define PCIEDEV_DEVICE_ID 0x0088	                    /* PCIEDEV (! not PCIEUNI) device ID = 0x0088 */
+#define PCIEUNI_DEVICE_ID 0x0099	                    /* PCIEUNI device ID = 0x0099, do not use yet! */
+#define LLRFADC_DEVICE_ID 0x0037	                    /* SIS8300 with DESY LLRF  Firmware */
+#define LLRFUTC_DEVICE_ID 0x0038	                    /* microTC/TCK7 (?) with DESY LLRF Firmware */
+#define LLRFDAMC_DEVICE_ID 0x0039	                    /* DAMC with DESY LLRF Firmware(?) */
+#define PCIEUNI_SUBVENDOR_ID PCI_ANY_ID
+#define PCIEUNI_SUBDEVICE_ID PCI_ANY_ID
 
 #define DMA_BOARD_ADDRESS   0x4
 #define DMA_CPU_ADDRESS     0x8

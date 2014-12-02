@@ -8,6 +8,7 @@ Standards-Version: 3.8.1
 Package: pcieuni-dkms
 Architecture: all
 Depends: ${misc:Depends}, dkms, gpcieuni-dkms (>=0.1)
+Conflicts: llrfuni-dkms
 Description: Universal PCIexpress device driver for  MicroTCA and
  other hot-plug capable architectures.
  .

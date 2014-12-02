@@ -4,7 +4,7 @@ obj-m := pcieuni.o
 KVERSION = $(shell uname -r)
 
 #define the package/module version (the same for this driver)
-PCIEUNI_PACKAGE_VERSION=0.1.0
+PCIEUNI_PACKAGE_VERSION=0.1.1
 
 all: configure-source-files
 	make -C /lib/modules/$(KVERSION)/build V=1 M=$(PWD) modules

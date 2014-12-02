@@ -49,9 +49,11 @@ struct file_operations pcieuni_fops = {
 };
 
 static struct pci_device_id pcieuni_ids[]  = {
-    { PCIEUNI_VENDOR_ID, PCIEUNI_DEVICE_ID, PCIEUNI_SUBVENDOR_ID, PCIEUNI_SUBDEVICE_ID, 0, 0, 0},
-    // TODO: this was added so that driver would bind to the test-firmware. Should probably remove it or ask for complete list of supported device IDs
-    { PCIEUNI_VENDOR_ID, 0x0037,            PCIEUNI_SUBVENDOR_ID, PCIEUNI_SUBDEVICE_ID, 0, 0, 0},     
+  /* Currently the PCIEUNI_DEVICE_ID 0x0099 is not used yet */
+  /*    { PCIEUNI_VENDOR_ID, PCIEUNI_DEVICE_ID, PCIEUNI_SUBVENDOR_ID, PCIEUNI_SUBDEVICE_ID, 0, 0, 0},*/
+    { PCIEUNI_VENDOR_ID, LLRFADC_DEVICE_ID, PCIEUNI_SUBVENDOR_ID, PCIEUNI_SUBDEVICE_ID, 0, 0, 0},     
+    { PCIEUNI_VENDOR_ID, LLRFUTC_DEVICE_ID, PCIEUNI_SUBVENDOR_ID, PCIEUNI_SUBDEVICE_ID, 0, 0, 0},     
+    { PCIEUNI_VENDOR_ID, LLRFDAMC_DEVICE_ID, PCIEUNI_SUBVENDOR_ID, PCIEUNI_SUBDEVICE_ID, 0, 0, 0},     
     { 0, }
 };
 MODULE_DEVICE_TABLE(pci, pcieuni_ids);
