@@ -1,5 +1,6 @@
 pcieuni-objs := pcieuni_drv.o pcieuni_fnc.o pcieuni_ioctl_dma.o 
 obj-m := pcieuni.o 
+ccflags-y += -fprofile-arcs -ftest-coverage
 
 KVERSION = $(shell uname -r)
 

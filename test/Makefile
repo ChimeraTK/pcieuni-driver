@@ -11,7 +11,7 @@ debug:  CXXFLAGS += -DMOCK_DEVICES
 ifdef GPCIEUNI_INCLUDE
 	CXXFLAGS += -I$(GPCIEUNI_INCLUDE)
 endif
-INCPATH       =  -I. 
+INCPATH       =  -I. -I/usr/local/include/gpcieuni
 LINK          = g++
 LFLAGS        = -Wl,--no-as-needed -lrt
 LIBS          = 

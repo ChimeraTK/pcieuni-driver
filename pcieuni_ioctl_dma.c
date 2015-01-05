@@ -144,7 +144,12 @@ int pcieuni_dma_read(pcieuni_dev* dev, unsigned long devOffset, unsigned long da
     pcieuni_buffer* nextBuffer = 0; // buffer to read to in this loop
     struct module_dev* mdev  = pcieuni_get_mdev(dev);
     
-    PDEBUG(dev->name, "pcieuni_dma_read(devOffset=0x%lx, dataSize=0x%lx)\n", devOffset, dataSize); 
+    PDEBUG(dev->name, "pcieuni_dma_read(devOffset=0x%lx, dataSize=0x%lx)\n", devOffset, dataSize);
+
+    if(!dev->mem_base2) {
+        PDEBUG(dev->name, "pcieuni_dma_read: ERROR: DMA BAR not mapped!\n");
+        return -EFAULT;
+    }
     
     // Loop until data is read 
     for (; !IS_ERR(prevBuffer) && (dataRead < dmaSize); )
