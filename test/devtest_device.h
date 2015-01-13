@@ -12,7 +12,7 @@
 #include <pthread.h>
 #include <vector>
 #include <iomanip>
-#include "pcieuni_io.h"
+#include <gpcieuni/pcieuni_io.h>
 
 using namespace std;
 

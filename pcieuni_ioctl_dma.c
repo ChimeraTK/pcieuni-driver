@@ -146,7 +146,7 @@ int pcieuni_dma_read(pcieuni_dev* dev, unsigned long devOffset, unsigned long da
     
     PDEBUG(dev->name, "pcieuni_dma_read(devOffset=0x%lx, dataSize=0x%lx)\n", devOffset, dataSize);
 
-    if(!dev->mem_base2) {
+    if(!dev->memmory_base2) {
         PDEBUG(dev->name, "pcieuni_dma_read: ERROR: DMA BAR not mapped!\n");
         return -EFAULT;
     }

@@ -12,7 +12,7 @@
 
 #include "devtest_device.h"
 #include "devtest_timer.h"
-#include "pcieuni_io.h"
+#include <gpcieuni/pcieuni_io.h>
 #include "devtest_test.h"
 
 
