@@ -124,10 +124,12 @@ void PcieuniTest::testReadWrite() {
     BOOST_CHECK_NO_THROW(
             _readerWriter->writeSingle(WORD_TIMING_FREQ + 0x00, 1, 4, 81250000));
 
-    // Try to read and write from bar 3, 4 or 5
+    // Try to read and write from bar 2, 3, 4 or 5
+    BOOST_CHECK_THROW(_readerWriter->readSingle(0, 2, 4), DeviceIOException);
     BOOST_CHECK_THROW(_readerWriter->readSingle(0, 3, 4), DeviceIOException);
     BOOST_CHECK_THROW(_readerWriter->readSingle(0, 4, 4), DeviceIOException);
     BOOST_CHECK_THROW(_readerWriter->readSingle(0, 5, 4), DeviceIOException);
+    BOOST_CHECK_THROW(_readerWriter->writeSingle(0, 2, 4, 1), DeviceIOException);
     BOOST_CHECK_THROW(_readerWriter->writeSingle(0, 3, 4, 1), DeviceIOException);
     BOOST_CHECK_THROW(_readerWriter->writeSingle(0, 4, 4, 1), DeviceIOException);
     BOOST_CHECK_THROW(_readerWriter->writeSingle(0, 5, 4, 1), DeviceIOException);
