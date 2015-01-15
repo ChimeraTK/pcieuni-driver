@@ -17,7 +17,7 @@
 #define DEVNAME "pcieuni"	                             /* name of device */
 #define PCIEUNI_VENDOR_ID 0x10EE	                    /* XILINX vendor ID */
 #define PCIEDEV_DEVICE_ID 0x0088	                    /* PCIEDEV (! not PCIEUNI) device ID = 0x0088 */
-#define PCIEUNI_DEVICE_ID 0x0099	                    /* PCIEUNI device ID = 0x0099, do not use yet! */
+#define PCIEUNI_DEVICE_ID 0x0099	                    /* PCIEUNI device ID = 0x0099*/
 #define LLRFADC_DEVICE_ID 0x0037	                    /* SIS8300 with DESY LLRF  Firmware */
 #define LLRFUTC_DEVICE_ID 0x0038	                    /* microTC/TCK7 (?) with DESY LLRF Firmware */
 #define LLRFDAMC_DEVICE_ID 0x0039	                    /* DAMC with DESY LLRF Firmware(?) */
