@@ -17,7 +17,7 @@
 #include "pcieuni_fnc.h"
 #include <gpcieuni/pcieuni_buffer.h>
 
-MODULE_AUTHOR("Martin Killenber");
+MODULE_AUTHOR("Ludwig Petrosyan, Tomasz Susnik, Jure Krasna, Martin Killenberg");
 MODULE_DESCRIPTION("Universal PCIe driver");
 MODULE_VERSION("@PCIEUNI_PACKAGE_VERSION@");
 MODULE_LICENSE("Dual BSD/GPL");
