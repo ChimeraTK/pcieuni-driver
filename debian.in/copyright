@@ -2,14 +2,17 @@ Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Source: https://svnsrv.desy.de/desy/mtca4u/drivers/pcieuni
 
 Files: *
-Copyright: 2013 Ludwig Petrosyan <ludwig.petrosyan@desy.de>
-           2014 Martin Killenberg <martin.killenberg@desy.de>
+Copyright: 2015, Deutsches Elektronen-Synchrotron DESY
+	   2015, Cosylab, d. d., Control System Laboratory
 License: GPL-2+
  This program is free software; you can redistribute it
  and/or  modify it under  the terms of  the GNU General
  Public  License as  published  by  the  Free  Software
  Foundation;  either  version 2 of the License, or  (at
  your option) any later version.
+ .
+ pcieuni is a branch of the pciedev driver.
+ Copyright: 2012-2014 Ludwig Petrosyan <ludwig.petrosyan@desy.de>
  .
  You should have received a copy of the GNU General Public License
  along with this program. If not, see <http://www.gnu.org/licenses/>.
