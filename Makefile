@@ -6,6 +6,8 @@ KVERSION = $(shell uname -r)
 #define the package/module version (the same for this driver)
 PCIEUNI_PACKAGE_VERSION=0.1.2
 
+PCIEUNI_DKMS_SOURCE_DIR=/usr/src/pcieuni-${PCIEUNI_PACKAGE_VERSION}
+
 ccflags-y = -Wall -Wuninitialized
 
 all: configure-source-files
@@ -16,8 +18,9 @@ install: dkms-prepare
 	dkms install -m pcieuni -v ${PCIEUNI_PACKAGE_VERSION} -k $(KVERSION)
 
 #Performs a dmks remove
+#Always returns true, so purge also works if there is no driver installed
 uninstall:
-	dkms remove -m pcieuni -v ${PCIEUNI_PACKAGE_VERSION} -k $(KVERSION)
+	dkms remove -m pcieuni -v ${PCIEUNI_PACKAGE_VERSION} -k $(KVERSION) || true
 
 #Compile with debug flag, causes lots of kernel output.
 #In addition the driver is compiled with code coverage. It only loads on
@@ -30,6 +33,10 @@ debug:
 clean:
 	make -C /lib/modules/$(KVERSION)/build V=1 M=$(PWD) clean
 	rm -f pcieuni_drv.c
+
+#uninstall and 
+purge: uninstall
+	rm -rf ${PCIEUNI_DKMS_SOURCE_DIR} /etc/udev/rules.d/10-pcieuni.rules
 
 #This target will only succeed on debian machines with the debian packaging tools installed
 debian_package: configure-package-files
@@ -54,12 +61,14 @@ configure-package-files:
 	cat dkms.conf.in | sed "{s/@PCIEUNI_PACKAGE_VERSION@/${PCIEUNI_PACKAGE_VERSION}/}" > dkms.conf
 	test -d debian_from_template || mkdir debian_from_template
 	cp dkms.conf debian_from_template/pcieuni-dkms.dkms
-	cp dkms.post_* debian_from_template/
 	(cd debian.in; cp compat  control  copyright ../debian_from_template)
 	cat debian.in/rules.in | sed "{s/@PCIEUNI_PACKAGE_VERSION@/${PCIEUNI_PACKAGE_VERSION}/}" > debian_from_template/rules
 	chmod +x debian_from_template/rules
 
 #copies the package sources to the place needed by dkms
+#The udev rules also have to be placed, so they are available for all kernels and not uninstalled if
+# the module for one kernel is removed.
 dkms-prepare: configure-source-files configure-package-files
-	test -d /usr/src/pcieuni-${PCIEUNI_PACKAGE_VERSION} || mkdir /usr/src/pcieuni-${PCIEUNI_PACKAGE_VERSION}
-	cp *.h *.c pcieuni_drv.c.in Makefile dkms.conf dkms.post_* *.rules /usr/src/pcieuni-${PCIEUNI_PACKAGE_VERSION}
+	test -d ${PCIEUNI_DKMS_SOURCE_DIR} || mkdir ${PCIEUNI_DKMS_SOURCE_DIR}
+	cp *.h *.c pcieuni_drv.c.in Makefile dkms.conf *.rules ${PCIEUNI_DKMS_SOURCE_DIR}
+	install --mode=644 *.rules /etc/udev/rules.d

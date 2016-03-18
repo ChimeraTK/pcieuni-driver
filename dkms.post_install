@@ -1,4 +1,0 @@
-#!/bin/sh
-
-#install the udev rules
-install --mode=644 *.rules /etc/udev/rules.d
