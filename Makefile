@@ -6,6 +6,8 @@ KVERSION = $(shell uname -r)
 #define the package/module version (the same for this driver)
 PCIEUNI_PACKAGE_VERSION=0.1.2
 
+ccflags-y = -Wall -Wuninitialized
+
 all: configure-source-files
 	make -C /lib/modules/$(KVERSION)/build V=1 M=$(PWD) modules
 
