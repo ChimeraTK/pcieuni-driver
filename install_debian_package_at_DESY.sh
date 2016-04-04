@@ -13,8 +13,16 @@
 
 DEBIAN_CODENAME=`lsb_release -c | sed "{s/Codename:\s*//}"`
 PACKAGE_FILES_WILDCARDS="pcieuni-dkms*.deb pcieuni-dkms*.changes"
+DEB_FILES_WILDCARDS="pcieuni-dkms*.deb"
 
 cd debian_package
+
+# Check that there are debian packages and return an error if not
+ls *.deb > /dev/null
+if [ $? -ne 0 ]; then
+    echo No debian packages found. Run \'make debian_package\' first.
+    exit 1
+fi
 
 # Step 1: Remove an older version of the package
 # -- from the nfs archive
@@ -33,7 +41,7 @@ cp ${PACKAGE_FILES_WILDCARDS} /home/debian/${DEBIAN_CODENAME}/stable
 
 # Step 3: Install to the repository
 for REPO in intern pub; do
-    for FILE in *.deb; do
+    for FILE in ${DEB_FILES_WILDCARDS}; do
 	ssh doocspkgs sudo -H reprepro --waitforlock 2 -Vb \
 	    /export/reprepro/${REPO}/doocs includedeb ${DEBIAN_CODENAME} \
 	    /home/debian/${DEBIAN_CODENAME}/stable/${FILE}
