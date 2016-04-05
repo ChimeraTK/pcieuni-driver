@@ -34,10 +34,10 @@ for REPO in intern pub; do
 done
 
 # Step 2: Set the correct file privileges
-chown :flash ${PACKAGE_FILES_WILDCARDS}
 chmod 664 ${PACKAGE_FILES_WILDCARDS}
-# -- and copy the files to the nfs archive
-cp ${PACKAGE_FILES_WILDCARDS} /home/debian/${DEBIAN_CODENAME}/stable
+# -- and copy the files to the nfs archive, using sg to copy with the flash group as target group
+# and umask to keep the privileges
+sg flash -c "umask 002; cp ${PACKAGE_FILES_WILDCARDS} /home/debian/${DEBIAN_CODENAME}/stable"
 
 # Step 3: Install to the repository
 for REPO in intern pub; do
