@@ -91,7 +91,7 @@ int pcieuni_wait_dma_read(module_dev* mdev, pcieuni_buffer* buffer)
         // DMA not finished yet - wait for IRQ handler 
         PDEBUG( mdev->parent_dev->name, "pcieuni_wait_dma_read(offset=0x%lx, size=0x%lx): Waiting... \n", buffer->dma_offset, buffer->dma_size); 
         
-        code = wait_event_interruptible_timeout( mdev->waitDMA, !test_bit(BUFFER_STATE_WAITING, &buffer->state), timeout);
+        code = wait_event_timeout( mdev->waitDMA, !test_bit(BUFFER_STATE_WAITING, &buffer->state), timeout);
         if (code == 0)
         {
             printk(KERN_ALERT "PCIEUNI(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): TIMEOUT!\n", 

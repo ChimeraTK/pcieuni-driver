@@ -127,7 +127,7 @@ int pcieuni_dma_reserve(module_dev* mdev, pcieuni_buffer* buffer)
         up(&mdev->dma_sem);
         
         PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve(): Waiting until dma available...\n"); 
-        waitVal = wait_event_interruptible_timeout(mdev->waitDMA, mdev->waitFlag, timeout);
+        waitVal = wait_event_timeout(mdev->waitDMA, mdev->waitFlag, timeout);
         if (0 == waitVal)
         {
             PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve(): Timeout!\n"); 
@@ -144,11 +144,7 @@ int pcieuni_dma_reserve(module_dev* mdev, pcieuni_buffer* buffer)
 #endif
         
         // protect against concurrent reservation of waitFlag
-        if (down_interruptible(&mdev->dma_sem))
-        {
-            PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve(): Interrupted!\n"); 
-            return -EINTR;
-        }        
+	  down(&mdev->dma_sem);
     }
     
     // Mark DMA read operation reserved and set the target buffer
@@ -171,7 +167,7 @@ void pcieuni_dma_release(module_dev* mdev)
     PDEBUG(mdev->parent_dev->name, "pcieuni_dma_release()");
     mdev->waitFlag   = 1;
     mdev->dma_buffer = 0; 
-    wake_up_interruptible(&(mdev->waitDMA));
+    wake_up(&(mdev->waitDMA));
 }
 
 
