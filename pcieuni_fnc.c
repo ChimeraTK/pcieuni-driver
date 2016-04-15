@@ -116,10 +116,7 @@ int pcieuni_dma_reserve(module_dev* mdev, pcieuni_buffer* buffer)
     PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve()");
    
     // protect against concurrent reservation of waitFlag
-    if (down_interruptible(&mdev->dma_sem))
-    {
-        return -EINTR;
-    }
+    down(&mdev->dma_sem);
     
     while (!mdev->waitFlag)
     {
