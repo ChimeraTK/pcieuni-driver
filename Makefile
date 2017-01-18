@@ -36,7 +36,7 @@ clean:
 
 #uninstall and 
 purge: uninstall
-	rm -rf ${PCIEUNI_DKMS_SOURCE_DIR} /etc/udev/rules.d/10-pcieuni.rules
+	rm -rf ${PCIEUNI_DKMS_SOURCE_DIR} /etc/udev/rules.d/10-pcieuni.rules /lib/udev/pcieuni-symlinks
 
 #This target will only succeed on debian machines with the debian packaging tools installed
 debian_package: configure-package-files
@@ -72,3 +72,4 @@ dkms-prepare: configure-source-files configure-package-files
 	test -d ${PCIEUNI_DKMS_SOURCE_DIR} || mkdir ${PCIEUNI_DKMS_SOURCE_DIR}
 	cp *.h *.c pcieuni_drv.c.in Makefile dkms.conf *.rules ${PCIEUNI_DKMS_SOURCE_DIR}
 	install --mode=644 *.rules /etc/udev/rules.d
+	install --mode=755 pcieuni-symlinks /lib/udev

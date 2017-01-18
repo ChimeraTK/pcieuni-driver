@@ -1,0 +1,34 @@
+#!/bin/bash
+
+ACTION=$1
+SLOT=$2
+
+PCIE_ADDRESS=`cat /sys/bus/pci/slots/${SLOT}/address`
+
+DEVICE=`cat /sys/bus/pci/devices/${PCIE_ADDRESS}.0/device`
+VENDOR=`cat /sys/bus/pci/devices/${PCIE_ADDRESS}.0/vendor`
+
+echo "ACTION=${ACTION}" > /tmp/myEnv
+echo "SLOT=${SLOT}" >> /tmp/myEnv
+env >> /tmp/myEnv
+
+if [ "$ACTION" == "add" ]; then
+  echo "HIER add $VENDOR $DEVICE" >> /tmp/myEnv
+
+  if [ "$VENDOR" == "0x10ee" ]; then   # Xilinx
+    if [ "$DEVICE" == "0x0037" ]; then
+      ln -sfn /dev/pcieunis${SLOT} /dev/llrfadcs${SLOT}
+    elif [ "$DEVICE" == "0x0038" ]; then
+      ln -sfn /dev/pcieunis${SLOT} /dev/llrfutcs${SLOT}
+    elif [ "$DEVICE" == "0x0039" ]; then
+      ln -sfn /dev/pcieunis${SLOT} /dev/llrfdamcs${SLOT}
+    fi
+  fi
+
+elif [ "$ACTION" == "remove" ]; then
+  echo "HIER remove" >> /tmp/myEnv
+  # remove symlinks to device which is shutting down
+  find /dev -lname "${DEVNAME}" -exec rm \{\} \;
+fi
+
+echo "done." >> /tmp/myEnv
