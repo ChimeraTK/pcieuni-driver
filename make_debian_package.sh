@@ -28,7 +28,7 @@ CHECKOUT_DIRECTORY=${PWD}/debian_package/${PCIEUNI_PACKAGE_VERSION}
 
 rm -rf debian_package
 mkdir debian_package
-svn co https://svnsrv.desy.de/public/mtca4u/drivers/pcieuni/tags/${PCIEUNI_PACKAGE_VERSION} ${CHECKOUT_DIRECTORY}
+git clone --branch ${PCIEUNI_PACKAGE_VERSION} https://github.com/ChimeraTK/pcieuni-driver.git ${CHECKOUT_DIRECTORY}
 
 cp -r debian_from_template ${CHECKOUT_DIRECTORY}/debian
 
