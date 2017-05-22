@@ -127,7 +127,7 @@ int pcieuni_dma_reserve(module_dev* mdev, pcieuni_buffer* buffer)
         waitVal = wait_event_timeout(mdev->waitDMA, mdev->waitFlag, timeout);
         if (0 == waitVal)
         {
-            PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve(): Timeout!\n"); 
+            printk(KERN_ALERT "PCIEUNI(%s): Error waiting for DMA to become available: Timeout!\n", mdev->parent_dev->name); 
             return -EBUSY; 
         }
         else if (0 > waitVal)
