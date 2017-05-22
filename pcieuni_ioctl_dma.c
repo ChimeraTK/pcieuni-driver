@@ -10,7 +10,9 @@
 
 #include "pcieuni_fnc.h"
 #include <gpcieuni/pcieuni_buffer.h>
-        
+
+static atomic_t dma_request_counter = ATOMIC_INIT(0);  
+
 /**
  * @brief Initiates DMA read from device
  * 
@@ -31,8 +33,10 @@ int pcieuni_start_dma_read(pcieuni_dev* dev, pcieuni_buffer *targetBuffer)
 {
     struct module_dev *mdev = pcieuni_get_mdev(dev);
     int retVal = 0;
+
+    atomic_inc(&dma_request_counter);
     
-    PDEBUG(dev->name, "pcieuni_start_dma_read(offset=0x%lx, maxSize=0x%lx)\n", targetBuffer->dma_offset, targetBuffer->dma_size); 
+    PDEBUG(dev->name, "pcieuni_start_dma_read(offset=0x%lx, maxSize=0x%lx) number %i\n", targetBuffer->dma_offset, targetBuffer->dma_size, atomic_read(&dma_request_counter)); 
 
     // reserve device registers IO
     retVal = pcieuni_dma_reserve(mdev, targetBuffer);
