@@ -4,7 +4,7 @@ obj-m := pcieuni.o
 KVERSION = $(shell uname -r)
 
 #define the package/module version (the same for this driver)
-PCIEUNI_PACKAGE_VERSION=0.1.6
+PCIEUNI_PACKAGE_VERSION=0.1.7
 
 PCIEUNI_DKMS_SOURCE_DIR=/usr/src/pcieuni-${PCIEUNI_PACKAGE_VERSION}
 
@@ -22,12 +22,14 @@ install: dkms-prepare
 uninstall:
 	dkms remove -m pcieuni -v ${PCIEUNI_PACKAGE_VERSION} -k $(KVERSION) || true
 
-#Compile with debug flag, causes lots of kernel output.
-#In addition the driver is compiled with code coverage. It only loads on
-#on a kernel with code coverage enabled.
-#FIXME: Should both options be separate, so you can get debug messages on a 
-#standard kernel?
+#Compile with debug flag, causes lots of kernel output, which fills the logs
+#and slows down the driver.
 debug:
+	KCPPFLAGS="-DPCIEUNI_DEBUG" make all
+
+#In addition to the debug output the driver is compiled with code coverage.
+#It only loads on a kernel with code coverage enabled.
+full_debug:
 	KCPPFLAGS="-DPCIEUNI_DEBUG -fprofile-arcs -ftest-coverage" make all
 
 clean:
