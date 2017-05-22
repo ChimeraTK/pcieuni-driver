@@ -22,7 +22,9 @@ MODULE_DESCRIPTION("Universal PCIe driver");
 MODULE_VERSION("@PCIEUNI_PACKAGE_VERSION@");
 MODULE_LICENSE("Dual BSD/GPL");
 
+#ifdef PCIEUNI_DEBUG
 static atomic_t interrupt_counter = ATOMIC_INIT(0);
+#endif
 
 /**
  * @brief Module parameter - size of kernel buffers used for DMA transfer (in kB)  
@@ -77,6 +79,7 @@ static irqreturn_t pcieuni_interrupt(int irq, void *dev_id)
     pcieuni_dev *dev = (pcieuni_dev*)dev_id;
     module_dev *mdev = pcieuni_get_mdev(dev);
     
+#ifdef PCIEUNI_DEBUG
     atomic_inc(&interrupt_counter);
   
     PDEBUG(dev->name, "pcieuni_interrupt(irq=%i) number %i for buffer at %p\n", irq, atomic_read(&interrupt_counter) , mdev->dma_buffer);
@@ -84,7 +87,8 @@ static irqreturn_t pcieuni_interrupt(int irq, void *dev_id)
     if (mdev->dma_buffer){
       PDEBUG(dev->name, " buffer state is 0x%lx", mdev->dma_buffer->state);
     }
-    
+#endif /*PCIEUNI_DEBUG*/
+  
     if (!mdev->dma_buffer || !test_bit(BUFFER_STATE_WAITING, &mdev->dma_buffer->state))
     {
         // We did not expect this interrupt
