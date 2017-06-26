@@ -22,6 +22,8 @@ if [ "$ACTION" == "add" ]; then
       ln -sfn /dev/pcieunis${SLOT} /dev/llrfutcs${SLOT}
     elif [ "$DEVICE" == "0x0039" ]; then
       ln -sfn /dev/pcieunis${SLOT} /dev/llrfdamcs${SLOT}
+    elif [ "$DEVICE" == "0x7021" ]; then
+      ln -sfn /dev/pcieunis${SLOT} /dev/llrfulogs${SLOT}
     fi
   fi
 
