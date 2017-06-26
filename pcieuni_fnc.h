@@ -21,6 +21,7 @@
 #define LLRFADC_DEVICE_ID 0x0037	                    /* SIS8300 with DESY LLRF  Firmware */
 #define LLRFUTC_DEVICE_ID 0x0038	                    /* microTC/TCK7 (?) with DESY LLRF Firmware */
 #define LLRFDAMC_DEVICE_ID 0x0039	                    /* DAMC with DESY LLRF Firmware(?) */
+#define LLRFULOG_DEVICE_ID 0x7021                           /* uLog (with DESY LLRF Firmware ?) */
 #define PCIEUNI_SUBVENDOR_ID PCI_ANY_ID
 #define PCIEUNI_SUBDEVICE_ID PCI_ANY_ID
 
