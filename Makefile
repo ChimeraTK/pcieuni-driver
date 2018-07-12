@@ -4,7 +4,7 @@ obj-m := pcieuni.o
 KVERSION = $(shell uname -r)
 
 #define the package/module version (the same for this driver)
-PCIEUNI_PACKAGE_VERSION=0.1.8
+PCIEUNI_PACKAGE_VERSION=0.1.9
 
 PCIEUNI_DKMS_SOURCE_DIR=/usr/src/pcieuni-${PCIEUNI_PACKAGE_VERSION}
 
