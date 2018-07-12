@@ -3,29 +3,35 @@
 ACTION=$1
 SLOT=$2
 
-PCIE_ADDRESS=`cat /sys/bus/pci/slots/${SLOT}/address`
-
-DEVICE=`cat /sys/bus/pci/devices/${PCIE_ADDRESS}.0/device`
-VENDOR=`cat /sys/bus/pci/devices/${PCIE_ADDRESS}.0/vendor`
+#There might be something (don't know what) that occupies /sys/bus/pci/slots/${SLOT} so the real
+#device is in ${SLOT}-1 (or higher?). We scan them all and make symlinks for all with matching vendor and device ID
+#(there should be only one)
+CANDIDATES=`ls -d /sys/bus/pci/slots/${SLOT} /sys/bus/pci/slots/${SLOT}-* 2>/dev/null`
 
 echo "ACTION=${ACTION}" > /tmp/myEnv
 echo "SLOT=${SLOT}" >> /tmp/myEnv
 env >> /tmp/myEnv
 
 if [ "$ACTION" == "add" ]; then
-  echo "HIER add $VENDOR $DEVICE" >> /tmp/myEnv
+  for CANDIDATE in ${CANDIDATES}; do
+    PCIE_ADDRESS=`cat ${CANDIDATE}/address`
 
-  if [ "$VENDOR" == "0x10ee" ]; then   # Xilinx
-    if [ "$DEVICE" == "0x0037" ]; then
-      ln -sfn /dev/pcieunis${SLOT} /dev/llrfadcs${SLOT}
-    elif [ "$DEVICE" == "0x0038" ]; then
-      ln -sfn /dev/pcieunis${SLOT} /dev/llrfutcs${SLOT}
-    elif [ "$DEVICE" == "0x0039" ]; then
-      ln -sfn /dev/pcieunis${SLOT} /dev/llrfdamcs${SLOT}
-    elif [ "$DEVICE" == "0x7021" ]; then
-      ln -sfn /dev/pcieunis${SLOT} /dev/llrfulogs${SLOT}
+    DEVICE=`cat /sys/bus/pci/devices/${PCIE_ADDRESS}.0/device`
+    VENDOR=`cat /sys/bus/pci/devices/${PCIE_ADDRESS}.0/vendor`
+    echo "HIER add $VENDOR $DEVICE for CANDIDATE ${CANDIDATE}" >> /tmp/myEnv
+
+    if [ "$VENDOR" == "0x10ee" ]; then   # Xilinx
+      if [ "$DEVICE" == "0x0037" ]; then
+        ln -sfn /dev/pcieunis${SLOT} /dev/llrfadcs${SLOT}
+      elif [ "$DEVICE" == "0x0038" ]; then
+        ln -sfn /dev/pcieunis${SLOT} /dev/llrfutcs${SLOT}
+      elif [ "$DEVICE" == "0x0039" ]; then
+        ln -sfn /dev/pcieunis${SLOT} /dev/llrfdamcs${SLOT}
+      elif [ "$DEVICE" == "0x7021" ]; then
+        ln -sfn /dev/pcieunis${SLOT} /dev/llrfulogs${SLOT}
+      fi
     fi
-  fi
+  done
 
 elif [ "$ACTION" == "remove" ]; then
   echo "HIER remove" >> /tmp/myEnv
