@@ -36,9 +36,14 @@ struct module_dev {
     int                brd_num;            /**< PCI board number */
     
     struct pcieuni_buffer_list dmaBuffers; /**< List of preallocated DMA buffers */
-    
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
     struct timeval     dma_start_time;
     struct timeval     dma_stop_time;
+#else
+    struct timespec64 dma_start_time;
+    struct timespec64 dma_stop_time;
+#endif
     int                waitFlag;           /**< Locks access to PCI device DMA read process */
     wait_queue_head_t  waitDMA;            /**< Wait queue for DMA read process to finish  */
     struct semaphore   dma_sem;            /**< Semaphore that protects against concurrent acquisition DMA read process */

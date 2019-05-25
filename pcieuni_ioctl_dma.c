@@ -52,9 +52,13 @@ int pcieuni_start_dma_read(pcieuni_dev* dev, pcieuni_buffer *targetBuffer)
     
     // write DMA destination address to device register
     retVal = pcieuni_register_write32(dev, dev->memmory_base2, DMA_CPU_ADDRESS, (u32)(targetBuffer->dma_handle & 0xFFFFFFFF), true);
-    if (retVal) goto cleanup_releaseDevice; 
-    
+    if (retVal) goto cleanup_releaseDevice;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
     do_gettimeofday(&(mdev->dma_start_time));
+#else
+    ktime_get_real_ts64(&(mdev->dma_start_time));
+#endif
 
     // Setup env for irq handler
     mdev->waitFlag   = 0;
@@ -122,7 +126,11 @@ int pcieuni_wait_dma_read(module_dev* mdev, pcieuni_buffer* buffer)
     
     PDEBUG(mdev->parent_dev->name, "pcieuni_wait_dma_read(offset=0x%lx, size=0x%lx): Done!",  buffer->dma_offset, buffer->dma_size);
     
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
     do_gettimeofday(&(mdev->dma_stop_time));
+#else
+    ktime_get_real_ts64(&(mdev->dma_stop_time));
+#endif
     return 0;
 }
 
@@ -295,11 +303,14 @@ long pcieuni_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
     * access_ok is kernel-oriented, so the concept of "read" and
     * "write" is reversed
     */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
     if (_IOC_DIR(cmd) & _IOC_READ)
         err = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
     else if (_IOC_DIR(cmd) & _IOC_WRITE)
         err =  !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
-    
+#else
+    err = !access_ok((void __user *)arg, _IOC_SIZE(cmd));
+#endif
     if (err) return -EFAULT;
 
     if (mutex_lock_interruptible(&dev->dev_mut))
@@ -308,13 +319,22 @@ long pcieuni_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
     switch (cmd) {
         case PCIEUNI_GET_DMA_TIME:
             retval = 0;
-            
+
             module_dev_pp->dma_start_time.tv_sec  += (long)dev->slot_num;
             module_dev_pp->dma_stop_time.tv_sec   += (long)dev->slot_num;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
             module_dev_pp->dma_start_time.tv_usec += (long)dev->brd_num;
             module_dev_pp->dma_stop_time.tv_usec  += (long)dev->brd_num;
             time_data.start_time = module_dev_pp->dma_start_time;
             time_data.stop_time  = module_dev_pp->dma_stop_time;
+#else
+            module_dev_pp->dma_start_time.tv_nsec += (long)dev->brd_num * NSEC_PER_USEC;
+            module_dev_pp->dma_stop_time.tv_nsec  += (long)dev->brd_num * NSEC_PER_USEC;
+            time_data.start_time.tv_sec = module_dev_pp->dma_start_time.tv_sec;
+            time_data.stop_time.tv_sec  = module_dev_pp->dma_stop_time.tv_sec;
+            time_data.start_time.tv_usec = module_dev_pp->dma_start_time.tv_sec / NSEC_PER_USEC;
+            time_data.stop_time.tv_usec  = module_dev_pp->dma_stop_time.tv_sec / NSEC_PER_USEC;
+#endif
             if (copy_to_user((device_ioctrl_time*)arg, &time_data, (size_t)size_time)) {
                 retval = -EIO;
                 mutex_unlock(&dev->dev_mut);
