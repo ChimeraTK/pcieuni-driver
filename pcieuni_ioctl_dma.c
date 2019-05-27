@@ -332,8 +332,8 @@ long pcieuni_ioctl_dma(struct file *filp, unsigned int *cmd_p, unsigned long *ar
             module_dev_pp->dma_stop_time.tv_nsec  += (long)dev->brd_num * NSEC_PER_USEC;
             time_data.start_time.tv_sec = module_dev_pp->dma_start_time.tv_sec;
             time_data.stop_time.tv_sec  = module_dev_pp->dma_stop_time.tv_sec;
-            time_data.start_time.tv_usec = module_dev_pp->dma_start_time.tv_sec / NSEC_PER_USEC;
-            time_data.stop_time.tv_usec  = module_dev_pp->dma_stop_time.tv_sec / NSEC_PER_USEC;
+            time_data.start_time.tv_usec = module_dev_pp->dma_start_time.tv_nsec / NSEC_PER_USEC;
+            time_data.stop_time.tv_usec  = module_dev_pp->dma_stop_time.tv_nsec / NSEC_PER_USEC;
 #endif
             if (copy_to_user((device_ioctrl_time*)arg, &time_data, (size_t)size_time)) {
                 retval = -EIO;
