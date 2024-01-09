@@ -104,7 +104,7 @@ int pcieuni_wait_dma_read(module_dev* mdev, pcieuni_buffer* buffer) {
 
     code = wait_event_timeout(mdev->waitDMA, !test_bit(BUFFER_STATE_WAITING, &buffer->state), timeout);
     if(code == 0) {
-      printk(KERN_ALERT "PCIEUNI(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): TIMEOUT!\n",
+      printk(KERN_ERR "pcieuni(%s): error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): TIMEOUT!\n",
           mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size);
 
       // assuming we missed the interrupt
@@ -112,7 +112,7 @@ int pcieuni_wait_dma_read(module_dev* mdev, pcieuni_buffer* buffer) {
       return -EIO;
     }
     else if(code < 0) {
-      printk(KERN_ALERT "PCIEUNI(%s): Error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): errno=%d!\n",
+      printk(KERN_ERR "pcieuni(%s): error waiting for DMA to buffer (offset=0x%lx, size=0x%lx): errno=%d!\n",
           mdev->parent_dev->name, buffer->dma_offset, buffer->dma_size, code);
 
       // assuming we missed the interrupt
@@ -275,7 +275,7 @@ long pcieuni_ioctl_dma(struct file* filp, unsigned int* cmd_p, unsigned long* ar
   pdev = (dev->pcieuni_pci_dev);
 
   if(!dev->dev_sts) {
-    printk(KERN_ALERT "PCIEUNI_IOCTRL: NO DEVICE %d\n", dev->dev_num);
+    printk(KERN_DEBUG "pcieuni: no device %d\n", dev->dev_num);
     retval = -EFAULT;
     return retval;
   }
