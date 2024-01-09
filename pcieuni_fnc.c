@@ -47,7 +47,7 @@ module_dev* pcieuni_create_mdev(int brd_num, pcieuni_dev* pcidev, unsigned long 
   }
 
   if(IS_ERR(buffer)) {
-    printk(KERN_ERR "PCIEUNI(%s): Failed to allocate DMA buffers!\n", pcidev->name);
+    printk(KERN_ERR "pcieuni(%s): failed to allocate DMA buffers!\n", pcidev->name);
     pcieuni_bufferList_clear(&mdev->dmaBuffers);
   }
 
@@ -118,7 +118,7 @@ int pcieuni_dma_reserve(module_dev* mdev, pcieuni_buffer* buffer) {
     PDEBUG(mdev->parent_dev->name, "pcieuni_dma_reserve(): Waiting until dma available...\n");
     waitVal = wait_event_timeout(mdev->waitDMA, mdev->waitFlag, timeout);
     if(0 == waitVal) {
-      printk(KERN_ALERT "PCIEUNI(%s): Error waiting for DMA to become available: Timeout!\n", mdev->parent_dev->name);
+      printk(KERN_ERR "pcieuni(%s): error waiting for DMA to become available: Timeout!\n", mdev->parent_dev->name);
       return -EBUSY;
     }
     else if(0 > waitVal) {

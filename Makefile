@@ -1,10 +1,10 @@
-pcieuni-objs := pcieuni_drv.o pcieuni_fnc.o pcieuni_ioctl_dma.o 
-obj-m := pcieuni.o 
+pcieuni-objs := pcieuni_drv.o pcieuni_fnc.o pcieuni_ioctl_dma.o
+obj-m := pcieuni.o
 
 KVERSION = $(shell uname -r)
 
 #define the package/module version (the same for this driver)
-PCIEUNI_PACKAGE_VERSION=0.1.10
+PCIEUNI_PACKAGE_VERSION=0.1.11
 
 PCIEUNI_DKMS_SOURCE_DIR=/usr/src/pcieuni-${PCIEUNI_PACKAGE_VERSION}
 
@@ -36,7 +36,7 @@ clean:
 	make -C /lib/modules/$(KVERSION)/build V=1 M=$(PWD) clean
 	rm -f pcieuni_drv.c
 
-#uninstall and 
+#uninstall and
 purge: uninstall
 	rm -rf ${PCIEUNI_DKMS_SOURCE_DIR} /etc/udev/rules.d/10-pcieuni.rules /lib/udev/pcieuni-symlinks
 
