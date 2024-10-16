@@ -1,0 +1,29 @@
+pcieuni-objs := pcieuni_drv.o pcieuni_fnc.o pcieuni_ioctl_dma.o
+obj-m := pcieuni.o
+
+KVERSION = $(shell uname -r)
+
+ccflags-y = -Wall -Wuninitialized
+
+all:
+	make -C /lib/modules/$(KVERSION)/build V=1 M=$(PWD) modules
+
+#Compile with debug flag, causes lots of kernel output, which fills the logs
+#and slows down the driver.
+debug:
+	KCPPFLAGS="-DPCIEUNI_DEBUG" make all
+
+#In addition to the debug output the driver is compiled with code coverage.
+#It only loads on a kernel with code coverage enabled.
+full_debug:
+	KCPPFLAGS="-DPCIEUNI_DEBUG -fprofile-arcs -ftest-coverage" make all
+
+clean:
+	make -C /lib/modules/$(KVERSION)/build V=1 M=$(PWD) clean
+
+#the two possible locations where the gpcieuni include files can be
+#/usr/local in case of a local, manual installation by the admin
+#/usr in case of an installation by the package management
+EXTRA_CFLAGS += -I/usr/include
+
+KBUILD_EXTRA_SYMBOLS = /lib/modules/$(KVERSION)/gpcieuni/Module.symvers
