@@ -18,7 +18,7 @@
 
 MODULE_AUTHOR("Ludwig Petrosyan, Tomasz Susnik, Jure Krasna, Martin Killenberg");
 MODULE_DESCRIPTION("Universal PCIe driver");
-MODULE_VERSION("@PCIEUNI_PACKAGE_VERSION@");
+MODULE_VERSION("@CMAKE_PROJECT_VERSION@");
 MODULE_LICENSE("Dual BSD/GPL");
 
 #ifdef PCIEUNI_DEBUG

@@ -1,0 +1,20 @@
+#!/bin/bash
+
+if [[ $EUID -ne 0 ]]; then
+   echo "Skipping dkms build/install w/o root privileges."
+   exit 0
+fi
+
+MOD_NAME="pcieuni"
+
+# Remove module in case it was installed previously
+dkms remove ${MOD_NAME}/@CMAKE_PROJECT_VERSION@ --all > /dev/null 2>&1 || true
+
+# Build dkms & update udev
+dkms add ${MOD_NAME}/@CMAKE_PROJECT_VERSION@
+
+if [ -z "${PACKAGING_INSTALL}" ]; then
+   dkms build ${MOD_NAME}/@CMAKE_PROJECT_VERSION@ && dkms install ${MOD_NAME}/@CMAKE_PROJECT_VERSION@ || true
+   udevadm trigger
+   modprobe ${MOD_NAME}
+fi
