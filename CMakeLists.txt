@@ -10,9 +10,8 @@ set(DKMS_DEST /usr/src/pcieuni-${CMAKE_PROJECT_VERSION})
 
 install(DIRECTORY DESTINATION ${DKMS_DEST})
 
-configure_file(${CMAKE_SOURCE_DIR}/dkms.conf.in dkms.conf @ONLY)
 install(FILES
-  "${CMAKE_BINARY_DIR}/dkms.conf"
+  "dkms.conf"
   DESTINATION ${DKMS_DEST}
 )
 
