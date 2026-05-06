@@ -70,11 +70,7 @@ MODULE_DEVICE_TABLE(pci, pcieuni_ids);
  * @retval IRQ_NONE     Interrupt was not from this device
  */
 
-#if LINUX_VERSION_CODE < 0x20613 // irq_handler_t has changed in 2.6.19
-static irqreturn_t sis8300_interrupt(int irq, void* dev_id, struct pt_regs* regs)
-#else
 static irqreturn_t pcieuni_interrupt(int irq, void* dev_id)
-#endif
 {
   pcieuni_dev* dev = (pcieuni_dev*)dev_id;
   module_dev* mdev = pcieuni_get_mdev(dev);
@@ -109,11 +105,7 @@ static irqreturn_t pcieuni_interrupt(int irq, void* dev_id)
   return IRQ_HANDLED;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 static int pcieuni_probe(struct pci_dev* dev, const struct pci_device_id* id)
-#else
-static int __devinit pcieuni_probe(struct pci_dev* dev, const struct pci_device_id* id)
-#endif
 {
   int result = 0;
   int tmp_brd_num = -1;
@@ -140,11 +132,7 @@ static int __devinit pcieuni_probe(struct pci_dev* dev, const struct pci_device_
   return result;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 static void pcieuni_remove(struct pci_dev* dev)
-#else
-static void __devexit pcieuni_remove(struct pci_dev* dev)
-#endif
 {
   int result = 0;
   int tmp_slot_num = -1;
@@ -162,21 +150,12 @@ static void __devexit pcieuni_remove(struct pci_dev* dev)
   result = pcieuni_remove_exp(dev, pcieuni_cdev_m, DEVNAME, &tmp_slot_num);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 static struct pci_driver pci_pcieuni_driver = {
     .name = DEVNAME,
     .id_table = pcieuni_ids,
     .probe = pcieuni_probe,
     .remove = pcieuni_remove,
 };
-#else
-static struct pci_driver pci_pcieuni_driver = {
-    .name = DEVNAME,
-    .id_table = pcieuni_ids,
-    .probe = pcieuni_probe,
-    .remove = __devexit_p(pcieuni_remove),
-};
-#endif
 
 static int pcieuni_open(struct inode* inode, struct file* filp) {
   int result = 0;
