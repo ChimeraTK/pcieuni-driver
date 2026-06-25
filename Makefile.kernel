@@ -1,7 +1,9 @@
 pcieuni-objs := pcieuni_drv.o pcieuni_fnc.o pcieuni_ioctl_dma.o
 obj-m := pcieuni.o
 
-KVERSION = $(shell uname -r)
+ifndef KVERSION
+KVERSION ?= $(shell uname -r)
+endif
 
 ccflags-y = -Wall -Wuninitialized -I/usr/include
 
