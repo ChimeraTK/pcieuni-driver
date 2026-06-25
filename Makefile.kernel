@@ -3,7 +3,7 @@ obj-m := pcieuni.o
 
 KVERSION = $(shell uname -r)
 
-ccflags-y = -Wall -Wuninitialized
+ccflags-y = -Wall -Wuninitialized -I/usr/include
 
 all:
 	make -C /lib/modules/$(KVERSION)/build V=1 M=$(PWD) modules
@@ -20,10 +20,5 @@ full_debug:
 
 clean:
 	make -C /lib/modules/$(KVERSION)/build V=1 M=$(PWD) clean
-
-#the two possible locations where the gpcieuni include files can be
-#/usr/local in case of a local, manual installation by the admin
-#/usr in case of an installation by the package management
-EXTRA_CFLAGS += -I/usr/include
 
 KBUILD_EXTRA_SYMBOLS = /lib/modules/$(KVERSION)/gpcieuni/Module.symvers
